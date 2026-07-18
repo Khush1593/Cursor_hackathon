@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -29,5 +29,13 @@ export class ConsentController {
   @ApiResponse({ status: 201 })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateConsentDto) {
     return this.consentService.record(user.userId, dto);
+  }
+
+  @Get('status')
+  @ApiOperation({
+    summary: 'Latest consent decisions (for ConsentGate UI)',
+  })
+  status(@CurrentUser() user: AuthUser) {
+    return this.consentService.getStatus(user.userId);
   }
 }

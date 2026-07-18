@@ -509,6 +509,22 @@ Response: `{ "is_emergency_state": false, "active_mode": "preventive" }`
 
 #### `GET /api/users/:userId/export` (NEW) — see Section 9.5
 
+#### `GET /api/users/:userId/history` (NEW)
+
+Paginated conversation history grouped by day. Query: `limit`, `days`, `cursor`.
+
+#### `POST /api/users/handoff` (NEW)
+
+"Talk to a human" — no AI. Returns emergency contact + follow-up message; persists `HumanHandoffRequest`.
+
+#### `POST /api/users/location` (NEW)
+
+Optional geolocation share. Returns demo `nearest_er` (name, address, distance_miles).
+
+#### `GET /api/consent/status` (NEW)
+
+Latest consent per type for ConsentGate. Triage enforces `data_collection` (and `voice_recording` for voice).
+
 #### `POST /api/feedback` (NEW)
 
 `userId` from JWT — do not send in body:
@@ -791,11 +807,11 @@ Services: `postgres:15-alpine`, `python_ai:8000`, `nestjs_gateway:3000`, `nextjs
 - [ ] CORS configured early
 - [ ] Audio autoplay unlock on PTT mousedown
 - [ ] HTTPS end-to-end
-- [ ] Rate limiting on AI/TTS calls
-- [ ] Auth enforced on every PHI-touching route
-- [ ] Audit log written on emergency + resolve actions
-- [ ] Consent recorded before first triage session
-- [ ] Data export/delete endpoints functional
+- [✓] Rate limiting on AI/TTS calls
+- [✓] Auth enforced on every PHI-touching route
+- [✓] Audit log written on emergency + resolve actions
+- [✓] Consent recorded before first triage session
+- [✓] Data export/delete endpoints functional
 
 ---
 

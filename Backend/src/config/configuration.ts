@@ -37,4 +37,5 @@ export default () => ({
     voiceId: process.env.ELEVENLABS_VOICE_ID ?? '',
   },
   rateLimitPerMinute: parseInt(process.env.RATE_LIMIT_PER_MINUTE ?? '10', 10),
+  triageBudgetPerHour: parseInt(process.env.TRIAGE_BUDGET_PER_HOUR ?? '60', 10),
 });

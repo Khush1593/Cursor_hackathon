@@ -22,10 +22,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
+    let message: string | string[] | object = 'Internal server error';
+    if (exception instanceof HttpException) {
+      const raw = exception.getResponse();
+      if (typeof raw === 'string') {
+        message = raw;
+      } else if (raw && typeof raw === 'object') {
+        const body = raw as Record<string, unknown>;
+        message =
+          typeof body.message === 'string' || Array.isArray(body.message)
+            ? (body.message as string | string[])
+            : raw;
+      }
+    }
 
     response.status(status).json({
       statusCode: status,

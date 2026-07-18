@@ -36,6 +36,8 @@ export class FallbackService {
           : 'Offline fallback: safe mode',
       ],
       updated_metrics: base.updated_metrics ?? {},
+      nearest_er: base.nearest_er ?? null,
+      ask_share_location: base.ask_share_location ?? (emergency ? true : false),
     };
   }
 
