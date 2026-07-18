@@ -102,12 +102,12 @@ services:
     plan: free
     dockerfilePath: ./Frontend/Dockerfile
     dockerContext: ./Frontend
-    # Build-time: Next rewrite target must reach Nest inside Render's private network
-    dockerBuildArgs:
+    envVars:
+      - key: HOSTNAME
+        value: "0.0.0.0"
+      # Render passes envVars as Docker build ARGs automatically (no dockerBuildArgs field).
+      # Next rewrite target = Nest on Render's private network (PORT defaults to 10000).
       - key: NEXT_PUBLIC_API_URL
         value: http://aura-backend:10000
       - key: NEXT_PUBLIC_USE_MOCK
         value: "0"
-    envVars:
-      - key: HOSTNAME
-        value: "0.0.0.0"
