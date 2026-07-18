@@ -45,7 +45,8 @@ async function bootstrap(): Promise<void> {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = config.get<number>('port') ?? 3000;
-  await app.listen(port);
+  // Bind all interfaces so the process is reachable inside Docker networks
+  await app.listen(port, '0.0.0.0');
 }
 
 void bootstrap();

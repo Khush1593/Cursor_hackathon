@@ -1,4 +1,4 @@
-# Aura V5 — Python triage engine (stateless FastAPI on :8000)
+# Aura — Python triage engine (stateless FastAPI on :8000)
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -10,7 +10,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+<<<<<<< Updated upstream
 COPY main.py models.py prompt.py llm.py tts.py config.py fairness.py triage_dataset.json ./
+=======
+COPY main.py models.py prompt.py llm.py config.py tts.py triage_dataset.json ./
+>>>>>>> Stashed changes
 
 EXPOSE 8000
 

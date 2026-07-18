@@ -12,6 +12,8 @@ const apiTarget = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000").r
 );
 
 const nextConfig: NextConfig = {
+  // Lean production image for Docker (copies .next/standalone + static assets)
+  output: "standalone",
   // Pin the workspace root to Frontend/. The monorepo has a second lockfile at
   // the repo root (husky/lint-staged), which otherwise makes Turbopack infer
   // the wrong root and produce a broken React Client Manifest.
