@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiCookieAuth,
   ApiOperation,
   ApiResponse,
@@ -48,8 +49,9 @@ export class AuthController {
   @ApiOperation({
     summary: 'Register a new user',
     description:
-      'Creates an account and sets HTTP-only access + refresh cookies. No tokens in the JSON body.',
+      'Creates an account (email + password required) and sets HTTP-only access + refresh cookies. No tokens in the JSON response body.',
   })
+  @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 201, type: AuthSessionResponseDto })
   @ApiResponse({ status: 409, description: 'Email already registered' })
   register(
@@ -65,8 +67,9 @@ export class AuthController {
   @ApiOperation({
     summary: 'Log in',
     description:
-      'Validates credentials and sets HTTP-only access + refresh cookies.',
+      'Validates email + password and sets HTTP-only access + refresh cookies.',
   })
+  @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, type: AuthSessionResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid email or password' })
   login(
@@ -137,6 +140,7 @@ export class AuthController {
     description:
       'Sends a Nodemailer password-reset email with a one-time link. Always returns a generic success message. Optional resetToken only when MAIL_DEV_EXPOSE_TOKEN=true in development.',
   })
+  @ApiBody({ type: ForgotPasswordDto })
   @ApiResponse({ status: 200, type: ForgotPasswordResponseDto })
   forgotPassword(
     @Body() dto: ForgotPasswordDto,
@@ -152,6 +156,7 @@ export class AuthController {
     description:
       'Consumes a one-time reset token and sets a new password. Revokes existing sessions.',
   })
+  @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, type: MessageResponseDto })
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
   resetPassword(@Body() dto: ResetPasswordDto): Promise<MessageResponseDto> {
