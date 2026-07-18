@@ -13,7 +13,7 @@ Browser  →  Frontend (:3001)  →  Backend (:3000)  →  Python AI (:8000)
 | App | Stack | Port | Role |
 |-----|--------|------|------|
 | **Frontend** | Next.js 16 + React 19 + Zustand + Tailwind | `3001` | Voice UI, auth pages, dashboard |
-| **Backend** | NestJS 11 + Prisma + PostgreSQL | `3000` | Auth, triage orchestration, integrations |
+| **Backend** | NestJS 11 + Prisma + PostgreSQL | `3000` | Auth, triage orchestration, fairness, integrations |
 | **Python** | FastAPI + Gemini | `8000` | Stateless clinical reasoning (`POST /triage`) |
 
 ---
@@ -26,10 +26,11 @@ Browser  →  Frontend (:3001)  →  Backend (:3000)  →  Python AI (:8000)
 4. [Environment variables](#environment-variables)
 5. [Useful URLs](#useful-urls)
 6. [Modules & features](#modules--features)
-7. [Example flows](#example-flows)
-8. [Project structure](#project-structure)
-9. [Troubleshooting](#troubleshooting)
-10. [Summary (easy words)](#summary-easy-words)
+7. [Nest ↔ Python contract (fairness, reasoning_trace, e2e)](#nest--python-contract-fairness-reasoning_trace-e2e)
+8. [Example flows](#example-flows)
+9. [Project structure](#project-structure)
+10. [Troubleshooting](#troubleshooting)
+11. [Summary (easy words)](#summary-easy-words)
 
 ---
 
@@ -42,7 +43,7 @@ Browser  →  Frontend (:3001)  →  Backend (:3000)  →  Python AI (:8000)
   - `ELEVENLABS_API_KEY` — spoken audio replies (Backend)
   - `EXA_API_KEY` — clinic / resource search (Backend)
 
-Without Gemini you can still smoke-test using AI stubs (`PYTHON_USE_AI_STUB=1` or `USE_AI_STUB=true`).
+Without Gemini you can still smoke-test using AI stubs (`PYTHON_USE_AI_STUB=1` or `USE_AI_STUB=1` in Python, or `USE_AI_STUB=true` / `BACKEND_USE_AI_STUB=true` in Nest).
 
 ---
 
@@ -71,7 +72,7 @@ BACKEND_USE_AI_STUB=false               # true = Nest never calls Python
 docker compose up --build
 ```
 
-First boot runs Prisma migrations automatically inside the Backend container.
+First boot runs Prisma migrations automatically inside the Backend container (including fairness aggregates).
 
 ### 3. Open the app
 
@@ -81,7 +82,9 @@ First boot runs Prisma migrations automatically inside the Backend container.
 | Login | http://localhost:3001/login |
 | Backend Swagger | http://localhost:3000/api/docs |
 | Backend health | http://localhost:3000/api/health |
+| Fairness stats (Nest) | http://localhost:3000/api/fairness/stats |
 | Python health | http://localhost:8000/health |
+| Python fairness (in-memory) | http://localhost:8000/fairness/stats |
 
 ### 4. Stop
 
@@ -127,6 +130,11 @@ Create a DB matching `Backend/.env.example`:
 
 ```text
 postgresql://aura_user:aura_password@localhost:5432/aura_db
+```
+
+```bash
+cd Backend
+npx prisma migrate deploy
 ```
 
 ### 1. Python AI — port 8000
@@ -186,7 +194,7 @@ See [`.env.example`](./.env.example). Important knobs:
 | `JWT_SECRET` | Signs access/refresh cookies — change in any shared environment |
 | `FRONTEND_ORIGIN` | Exact browser origin (default `http://localhost:3001`) |
 | `GEMINI_API_KEY` | Google Gemini key for Python triage |
-| `PYTHON_USE_AI_STUB` | `1` = Python returns deterministic stubs (no Gemini) |
+| `PYTHON_USE_AI_STUB` / `USE_AI_STUB` | `1` = Python returns deterministic stubs (no Gemini) |
 | `BACKEND_USE_AI_STUB` | `true` = Nest skips Python entirely |
 | `ELEVENLABS_*` / `EXA_API_KEY` | Optional voice + clinic search |
 | `NEXT_PUBLIC_USE_MOCK` | Frontend build arg: `1` = mock triage UI handlers |
@@ -210,7 +218,10 @@ See [`.env.example`](./.env.example). Important knobs:
 | Forgot / reset password | `/forgot-password` · `/reset-password` |
 | API docs (Swagger) | http://localhost:3000/api/docs |
 | Backend health | `GET /api/health` |
+| Nest fairness (Postgres) | `GET /api/fairness/stats` |
+| Nest fairness sync | `POST /api/fairness/sync` |
 | Python health / ready | `GET /health` · `GET /ready` |
+| Python fairness (RAM) | `GET /fairness/stats` |
 
 ---
 
@@ -225,6 +236,7 @@ See [`.env.example`](./.env.example). Important knobs:
 | **Voice input** | Push-to-talk via Web Speech API |
 | **Voice output** | Plays Backend `audio_base64` replies |
 | **Triage UI** | Sends turns to `POST /api/triage/turn`, shows spoken + UI text |
+| **Explainability** | Stores `reasoning_trace` → shows in emergency / handoff UI |
 | **Dashboard** | Metrics charts (Recharts), recurring conditions, emergency banner |
 | **Zustand store** | Client state for session, mode, metrics |
 | **API proxy** | `/api-proxy` rewrite keeps cookies same-origin |
@@ -248,14 +260,15 @@ Cookies `aura_access_token` / `aura_refresh_token` are set as HttpOnly (never in
 |--------|------|----------------|
 | **Auth** | `src/auth` | Register, login, refresh, logout, me, password reset |
 | **Users** | `src/users` | Dashboard, history, location, handoff, export/delete data |
-| **Triage** | `src/triage` | Orchestrates one turn: Python → validate → persist → TTS/Exa |
+| **Triage** | `src/triage` | Orchestrates one turn: Python → Zod validate → persist → TTS/Exa |
+| **Fairness** | `src/fairness` | Durable non-PHI aggregates in Postgres |
 | **Consent** | `src/consent` | Record / read HIPAA-style consent |
-| **Feedback** | `src/feedback` | User feedback on triage quality |
+| **Feedback** | `src/feedback` | User feedback on triage quality (“incorrect triage” flags) |
 | **Mail** | `src/mail` | Nodemailer password-reset emails |
 | **Integrations** | `src/integrations` | Python AI client, ElevenLabs TTS, Exa search |
 | **Audit** | `src/audit` | Security / access audit trail |
 | **Prisma** | `prisma/` | PostgreSQL schema + migrations |
-| **Fallbacks** | `src/data` | Offline keyword fallbacks if AI is down |
+| **Fallbacks** | `src/data` | Offline keyword fallbacks if AI is down / returns 502 |
 
 **Example — triage turn:**
 
@@ -266,21 +279,11 @@ Content-Type: application/json
 
 {
   "transcript": "I have a fever and a bad cough for two days",
-  "user_context": { "age": 34, "sex": "female" }
+  "inputMode": "text"
 }
 ```
 
-Typical response fields (contract-style):
-
-```json
-{
-  "action_type": "general_response",
-  "detected_mode": "urgent_care",
-  "ai_spoken_response": "Based on fever and cough lasting two days…",
-  "ui_display_text": "Urgent care suggested",
-  "audio_base64": null
-}
-```
+Typical response includes `reasoning_trace` (1–3 short explainability bullets) for the UI.
 
 **Severity modes:**
 
@@ -296,27 +299,33 @@ Typical response fields (contract-style):
 
 | Module | File | What it does |
 |--------|------|----------------|
-| **API** | `main.py` | FastAPI app: `/health`, `/ready`, `/triage`, `/tts` |
-| **Models** | `models.py` | Frozen Nest contract (`TriageRequest` / `AuraResponse`) |
-| **LLM** | `llm.py` | Gemini structured output |
+| **API** | `main.py` | `/health`, `/ready`, `/triage`, `/tts`, `/fairness/stats` |
+| **Models** | `models.py` | Frozen Nest contract (`AuraResponse` + `reasoning_trace`) |
+| **LLM** | `llm.py` | Gemini / stub; stroke → emergency bypass |
 | **Prompt** | `prompt.py` | System prompt + differential protocol |
 | **Config** | `config.py` | Env + stub flags |
+| **Fairness** | `fairness.py` | In-memory counters (reset on process restart) |
+| **Guardrails** | `guardrails.py` | Health-scope refusals for non-clinical prompts |
+| **Shortcuts** | `triage_shortcuts.py` | Deterministic triage paths (e.g. leg pain) |
 | **TTS demo** | `tts.py` | Optional ElevenLabs path (Nest owns production TTS) |
 | **Dataset** | `triage_dataset.json` | Condition severity reference |
 
-**Example — Nest → Python:**
+**Stroke example (Nest-shaped body):**
 
 ```http
-POST http://python_ai:8000/triage
+POST http://localhost:8000/triage
 Content-Type: application/json
 
 {
-  "transcript": "Sharp chest pain and shortness of breath",
-  "user_context": { "age": 55, "sex": "male", "chronic_conditions": [] }
+  "transcript": "my face is drooping and speech slurred",
+  "baseline": { "age": 58, "sex": "male", "chronicConditions": ["hypertension"], "currentMeds": ["lisinopril"] },
+  "recentLogs": [],
+  "recurringConditions": [],
+  "pendingTriage": null
 }
 ```
 
-Python returns JSON matching `AuraResponse`. Nest validates, translates field names for the Frontend, may attach TTS audio, and persists history.
+Expected: `action_type: "emergency_escalation"`, `detected_mode: "emergency"`, `reasoning_trace` with stroke/bypass why-bullets. On LLM failure Python returns **502** — Nest owns `fallback_responses.json`.
 
 ---
 
@@ -330,16 +339,58 @@ Python returns JSON matching `AuraResponse`. Nest validates, translates field na
 
 ---
 
+## Nest ↔ Python contract (fairness, reasoning_trace, e2e)
+
+### `reasoning_trace`
+
+- Python returns 1–3 short non-PHI bullets on every triage.
+- Nest validates with Zod (`aura.schema.ts`) and **passes them through** on `POST /api/triage/turn`.
+- **Frontend already supports this** (`lastReasoningTrace` in the store, shown in emergency / handoff UI).  
+  **No Frontend code changes are required** for the Nest fairness / e2e / `reasoning_trace` work.
+
+### Fairness aggregates (non-PHI)
+
+| Layer | Storage | Notes |
+|-------|---------|--------|
+| Python `GET /fairness/stats` | In-memory | Resets when Python restarts |
+| Nest `GET /api/fairness/stats` | **Postgres** (`FairnessAggregate`) | Durable — Nest records after each successful triage |
+| Nest `POST /api/fairness/sync` | Scrapes Python → merges with `GREATEST(db, python)` | Picks up direct Python traffic |
+
+Buckets only: `age_band` × `sex_group` × `action_type` × `detected_mode` × `count`.  
+**Never** stores user IDs, transcripts, or condition narratives.
+
+```bash
+curl http://localhost:3000/api/fairness/stats
+curl -X POST http://localhost:3000/api/fairness/sync
+```
+
+### Nest e2e / CI tests
+
+Calls **real** `PYTHON_SERVICE_URL` over HTTP (not Python’s TestClient):
+
+- Zod parse of `AuraResponse` (including `reasoning_trace`)
+- Stroke transcript → `emergency_escalation`
+- Simulated **502** → Nest `FallbackService` emergency fallback
+
+```bash
+# Terminal A — Python stub mode (deterministic CI)
+cd Python && USE_AI_STUB=1 uvicorn main:app --port 8000
+
+# Terminal B
+cd Backend
+PYTHON_SERVICE_URL=http://127.0.0.1:8000 npm run test:e2e
+```
+
+---
+
 ## Example flows
 
 ### A. First-time user (happy path)
 
 1. Open http://localhost:3001/register  
-2. Create an account (email, password, age, sex, optional meds/contacts)  
-3. Accept consent when prompted  
-4. Land on the dashboard / voice triage screen  
-5. Hold push-to-talk (or type): *“I’ve had a mild headache for a day”*  
-6. Backend calls Python → UI shows mode + spoken reply (and audio if ElevenLabs is configured)
+2. Create an account → accept consent  
+3. Push-to-talk or type symptoms  
+4. Backend calls Python → UI shows mode + spoken reply + `reasoning_trace`
 
 ### B. Smoke test without API keys
 
@@ -353,25 +404,22 @@ NEXT_PUBLIC_USE_MOCK=0
 docker compose up --build
 ```
 
-Register → login → send a triage turn. Python returns deterministic stubs; Nest still exercises the full path.
-
 ### C. Frontend-only mock triage
-
-In `Frontend/.env.local` (local Next only):
 
 ```env
 NEXT_PUBLIC_USE_MOCK=1
 NEXT_PUBLIC_API_URL=http://localhost:3000
 ```
 
-Auth still hits Nest; triage/dashboard can use local mock route handlers.
+Auth still hits Nest; triage/dashboard can use local mock handlers.
 
 ### D. Health checks
 
 ```bash
 curl http://localhost:8000/health
 curl http://localhost:3000/api/health
-curl http://localhost:3001/api-proxy/api/health   # Frontend rewrite → Backend
+curl http://localhost:3001/api-proxy/api/health
+curl http://localhost:3000/api/fairness/stats
 ```
 
 ---
@@ -382,24 +430,29 @@ curl http://localhost:3001/api-proxy/api/health   # Frontend rewrite → Backend
 Cursor_hackathon/
 ├── Frontend/                 # Next.js UI (:3001)
 │   ├── Dockerfile
-│   ├── app/                  # App Router pages
+│   ├── app/
 │   ├── components/
-│   ├── lib/                  # API client, audio helpers
-│   └── store/                # Zustand
+│   ├── lib/
+│   └── store/
 ├── Backend/                  # NestJS gateway (:3000)
 │   ├── Dockerfile
-│   ├── docker-entrypoint.sh  # prisma migrate + start
+│   ├── docker-entrypoint.sh
 │   ├── prisma/
-│   └── src/                  # auth, triage, users, …
+│   ├── src/fairness/
+│   ├── src/triage/
+│   └── test/
 ├── Python/                   # FastAPI triage engine (:8000)
 │   ├── Dockerfile
 │   ├── main.py
 │   ├── llm.py
+│   ├── fairness.py
+│   ├── guardrails.py
+│   ├── triage_shortcuts.py
 │   └── triage_dataset.json
-├── Project_Instructions/     # Specs & knowledge base
+├── Project_Instructions/
 ├── docker-compose.yml
 ├── .env.example
-└── README.md                 # this file
+└── README.md
 ```
 
 ---
@@ -408,18 +461,21 @@ Cursor_hackathon/
 
 | Problem | Fix |
 |---------|-----|
-| CORS / cookies fail on login | `FRONTEND_ORIGIN` must exactly match the browser URL (e.g. `http://localhost:3001`) |
-| Frontend can’t reach API in Docker | Rebuild Frontend after changing rewrite target; inside Compose it must be `http://backend:3000` |
-| Backend can’t reach Python | In Docker use `PYTHON_SERVICE_URL=http://python_ai:8000`; locally use `http://localhost:8000` |
+| CORS / cookies fail on login | `FRONTEND_ORIGIN` must exactly match the browser URL |
+| Frontend can’t reach API in Docker | Rewrite target must be `http://backend:3000` inside Compose |
+| Backend can’t reach Python | Docker: `http://python_ai:8000` · local: `http://localhost:8000` |
 | Port already in use | Stop local Nest/uvicorn/Postgres, or change `*_PORT` in `.env` |
-| Prisma errors on start | Ensure Postgres is healthy; entrypoint runs `prisma migrate deploy` |
-| Empty / slow AI replies | Set a valid `GEMINI_API_KEY`, or enable stubs for demos |
-| Password reset email missing | Configure `MAIL_*` or use `MAIL_DEV_EXPOSE_TOKEN=true` in local/dev only |
+| Prisma errors on start | `npx prisma migrate deploy` (includes fairness table) |
+| Empty / slow AI replies | Set `GEMINI_API_KEY`, or enable stubs |
+| e2e skips live Python tests | Start Python (`USE_AI_STUB=1`) and set `PYTHON_SERVICE_URL` |
+| Fairness empty after Python restart | Expected for Python RAM — Nest Postgres keeps durable counts |
+| Python Docker import errors | Rebuild image; Dockerfile must COPY `fairness.py`, `guardrails.py`, `triage_shortcuts.py` |
 
 ```bash
 docker compose logs -f backend
 docker compose logs -f python_ai
 docker compose logs -f frontend
+cd Backend && npm run test:e2e
 ```
 
 ---
@@ -428,10 +484,10 @@ docker compose logs -f frontend
 
 **Aura** is a small health helper made of three apps that talk to each other.
 
-1. **Frontend** is the website you open. You sign in, speak or type how you feel, and see advice and charts.  
-2. **Backend** is the middle manager. It checks who you are (secure cookies), saves your history in a database, calls the AI, and can add voice audio or clinic search.  
-3. **Python** is the AI brain. It reads your symptoms and returns a careful JSON answer: what mode you’re in (mild / urgent / emergency) and what to say next.  
+1. **Frontend** is the website you open. You sign in, speak or type how you feel, and see advice, charts, and short “why” bullets (`reasoning_trace`).  
+2. **Backend** is the middle manager. It checks who you are, saves history, calls the AI, keeps **fairness stats** in Postgres (no private transcripts), and falls back safely on 502.  
+3. **Python** is the AI brain. It returns careful JSON (mode + spoken reply + reasoning). Its fairness counters reset on restart; Nest keeps the long-term copy.  
 
-You can start everything with **one Docker command**, or run each app yourself on ports **3001**, **3000**, and **8000**.  
+Start everything with **Docker**, or run apps on **3001**, **3000**, and **8000**.  
 
-Aura is built for demos and learning — it **does not replace a doctor**. For real emergencies, call local emergency services.
+Aura is for demos and learning — it **does not replace a doctor**. For real emergencies, call local emergency services.

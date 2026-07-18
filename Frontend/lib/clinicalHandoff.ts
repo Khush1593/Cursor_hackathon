@@ -55,8 +55,7 @@ function formatDelta(metrics: HandoffInput["metrics"]): string {
   if (withSleep.length >= 2) {
     const first = withSleep[0].sleep_hours!;
     const last = withSleep[withSleep.length - 1].sleep_hours!;
-    const pct =
-      first > 0 ? Math.round(((last - first) / first) * 100) : null;
+    const pct = first > 0 ? Math.round(((last - first) / first) * 100) : null;
     bits.push(
       pct != null
         ? `Sleep ${first}h → ${last}h (${pct > 0 ? "+" : ""}${pct}%)`
@@ -73,11 +72,9 @@ function formatDelta(metrics: HandoffInput["metrics"]): string {
 export function buildClinicalHandoffText(input: HandoffInput): string {
   const age = input.age ?? "?";
   const sex = sexLabel(input.sex);
-  const complaint =
-    (input.chiefComplaint ?? "").trim() || "Not captured on this turn.";
+  const complaint = (input.chiefComplaint ?? "").trim() || "Not captured on this turn.";
   const triage =
-    (input.aiSpoken ?? "").trim() ||
-    "Aura flagged a possible emergency — seek care now.";
+    (input.aiSpoken ?? "").trim() || "Aura flagged a possible emergency — seek care now.";
   const why =
     (input.reasoningTrace ?? []).filter(Boolean).slice(0, 3).join(" | ") ||
     "Differential risk stratification triggered emergency mode.";

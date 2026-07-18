@@ -26,6 +26,6 @@
       "@prisma-client": ["src/prisma"]
     }
   },
-  "include": ["src/**/*", "prisma/**/*"],
+  "include": ["src/**/*", "prisma/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
 }

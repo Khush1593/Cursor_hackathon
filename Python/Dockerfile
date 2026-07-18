@@ -10,11 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-<<<<<<< Updated upstream
-COPY main.py models.py prompt.py llm.py tts.py config.py fairness.py triage_dataset.json ./
-=======
-COPY main.py models.py prompt.py llm.py config.py tts.py triage_dataset.json ./
->>>>>>> Stashed changes
+# All runtime modules (fairness, guardrails, shortcuts) — keep in sync with main.py imports
+COPY main.py models.py prompt.py llm.py tts.py config.py fairness.py guardrails.py triage_shortcuts.py triage_dataset.json ./
 
 EXPOSE 8000
 

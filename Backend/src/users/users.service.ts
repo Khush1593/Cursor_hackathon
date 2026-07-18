@@ -323,9 +323,23 @@ export class UsersService {
       byDate.set(date, existing);
     }
 
-    return Array.from(byDate.values()).sort((a, b) =>
-      a.date.localeCompare(b.date),
-    );
+    // Always return the last 7 calendar days (UTC) so the chart axis is stable
+    const padded: MetricsPoint[] = [];
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setUTCDate(today.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      padded.push(
+        byDate.get(key) ?? {
+          date: key,
+          pain_level: null,
+          sleep_hours: null,
+        },
+      );
+    }
+    return padded;
   }
 
   private buildRecentMessages(
@@ -362,9 +376,26 @@ export class UsersService {
       return { pain_level: null, sleep_hours: null };
     }
     const obj = value as Record<string, unknown>;
-    return {
-      pain_level: typeof obj.pain_level === 'number' ? obj.pain_level : null,
-      sleep_hours: typeof obj.sleep_hours === 'number' ? obj.sleep_hours : null,
-    };
+    const pain = this.coerceMetric(obj.pain_level, 1, 10);
+    const sleep = this.coerceMetric(obj.sleep_hours, 0, 24);
+    return { pain_level: pain, sleep_hours: sleep };
+  }
+
+  private coerceMetric(
+    value: unknown,
+    min: number,
+    max: number,
+  ): number | null {
+    let n: number | null = null;
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      n = value;
+    } else if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) n = parsed;
+    }
+    if (n == null) return null;
+    const rounded = Math.round(n);
+    if (rounded < min || rounded > max) return null;
+    return rounded;
   }
 }

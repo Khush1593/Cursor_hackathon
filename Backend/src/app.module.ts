@@ -14,6 +14,7 @@ import { AuditModule } from './audit/audit.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { MailModule } from './mail/mail.module';
+import { FairnessModule } from './fairness/fairness.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { MailModule } from './mail/mail.module';
     ConsentModule,
     AuditModule,
     FeedbackModule,
+    FairnessModule,
   ],
   controllers: [AppController],
   providers: [

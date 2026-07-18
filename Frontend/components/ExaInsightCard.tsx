@@ -2,10 +2,36 @@
 
 import { useAuraStore } from "@/store/aura.store";
 
-/** Research insight card ({ title, url, summary }). Hidden when there is none. */
+/** Research insight card. Hidden unless third-party sharing consent is granted. */
 export function ExaInsightCard() {
   const exa = useAuraStore((s) => s.currentExa);
+  const allowed = useAuraStore((s) => s.consents.third_party_sharing === true);
+  const grantConsents = useAuraStore((s) => s.grantConsents);
+
   if (!exa) return null;
+
+  if (!allowed) {
+    return (
+      <div
+        style={{ animation: "rise 0.5s cubic-bezier(0.22,1,0.36,1) both" }}
+        className="aura-panel aura-transition rounded-3xl p-5 shadow-sm"
+      >
+        <p className="text-[10px] font-semibold tracking-[0.18em] text-aura-accent uppercase">
+          Research available
+        </p>
+        <p className="mt-2 text-sm text-aura-muted">
+          Aura found a related insight. Enable third-party sharing to view it.
+        </p>
+        <button
+          type="button"
+          onClick={() => void grantConsents(["third_party_sharing"])}
+          className="mt-3 rounded-full bg-aura-accent px-4 py-2 text-sm font-semibold text-white"
+        >
+          Enable & show insight
+        </button>
+      </div>
+    );
+  }
 
   return (
     <a

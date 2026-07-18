@@ -13,8 +13,14 @@ from google.genai import types
 from pydantic import BaseModel, Field, ValidationError
 
 from config import gemini_api_key, llm_timeout_seconds, model_name, use_ai_stub
+from guardrails import health_scope_refusal_response, is_non_health_info_request
 from models import AuraResponse, PendingTriage, TriageRequest
 from prompt import build_messages
+from triage_shortcuts import (
+    correct_false_emergency_escalation,
+    leg_pain_opening_shortcut,
+    mid_triage_denial_shortcut,
+)
 
 ALLOWED_METRIC_KEYS = frozenset({"pain_level", "sleep_hours"})
 
@@ -256,15 +262,48 @@ def _stub_response(request: TriageRequest) -> AuraResponse:
                 "Checking secondary: radiating arm/jaw pain or crushing pressure",
             ],
         )
+    if "sleep" in text or "slept" in text:
+        return AuraResponse(
+            action_type="resolve",
+            detected_mode="preventive",
+            detected_condition_id="sleep_hygiene",
+            extracted_dashboard_metrics={"sleep_hours": 5},
+            ai_spoken_response=(
+                "Noted — logging your sleep and keeping an eye on trends."
+            ),
+            trigger_exa_search=None,
+            pending_triage_update=None,
+            reasoning_trace=["Stub: sleep mention → preventive resolve"],
+        )
+    if "pain" in text or "migraine" in text or "ache" in text:
+        return AuraResponse(
+            action_type="resolve",
+            detected_mode="urgent_care",
+            detected_condition_id="migraine_exacerbation",
+            extracted_dashboard_metrics={"pain_level": 6},
+            ai_spoken_response=(
+                "Logged your pain level for trend tracking. "
+                "Rest in a dark room and stay hydrated for now."
+            ),
+            trigger_exa_search=None,
+            pending_triage_update=None,
+            reasoning_trace=["Stub: pain/migraine mention → log vitals"],
+        )
     return AuraResponse(
         action_type="general_response",
         detected_mode="preventive",
         detected_condition_id=None,
         extracted_dashboard_metrics={},
-        ai_spoken_response="Sounds good - I'm here if you want to log how you feel later.",
+        ai_spoken_response=(
+            "I'm here for health check-ins only - symptoms, sleep, pain, or how you feel. "
+            "Tell me anything health-related when you're ready."
+        ),
         trigger_exa_search=None,
         pending_triage_update=None,
-        reasoning_trace=["No clinical triggers matched; general acknowledgment"],
+        reasoning_trace=[
+            "No clinical triggers matched",
+            "Staying in health-scope acknowledgment only",
+        ],
     )
 
 
@@ -329,14 +368,36 @@ def _call_gemini(system: str, user: str, *, repair: bool = False) -> AuraLLMSche
 
 def run_triage(request: TriageRequest) -> AuraResponse:
     """Build prompts → call Gemini (or stub) → validate → sanitize metrics."""
+    # Hard guardrail: refuse off-topic info requests before calling the LLM.
+    if is_non_health_info_request(request):
+        return _sanitize_aura(health_scope_refusal_response(), request.transcript)
+
+    # Deterministic mid-triage denial / leg-pain openers (prevent false emergencies).
+    denial = mid_triage_denial_shortcut(request)
+    if denial is not None:
+        return _sanitize_aura(denial, request.transcript)
+
+    leg_open = leg_pain_opening_shortcut(request)
+    if leg_open is not None:
+        return _sanitize_aura(leg_open, request.transcript)
+
     if _use_stub():
-        return _sanitize_aura(_stub_response(request), request.transcript)
+        result = _sanitize_aura(_stub_response(request), request.transcript)
+        return _sanitize_aura(
+            correct_false_emergency_escalation(request, result),
+            request.transcript,
+        )
 
     messages = build_messages(request)
     try:
         parsed = _call_gemini(messages["system"], messages["user"], repair=False)
-        return _sanitize_aura(_to_aura_response(parsed), request.transcript)
+        result = _sanitize_aura(_to_aura_response(parsed), request.transcript)
     except (ValidationError, json.JSONDecodeError, ValueError, RuntimeError):
         # One repair retry; if that fails, raise so NestJS fallback can take over.
         parsed = _call_gemini(messages["system"], messages["user"], repair=True)
-        return _sanitize_aura(_to_aura_response(parsed), request.transcript)
+        result = _sanitize_aura(_to_aura_response(parsed), request.transcript)
+
+    return _sanitize_aura(
+        correct_false_emergency_escalation(request, result),
+        request.transcript,
+    )
