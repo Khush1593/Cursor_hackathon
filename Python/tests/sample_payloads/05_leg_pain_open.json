@@ -1,0 +1,12 @@
+{
+  "transcript": "I have bad pain in my leg",
+  "baseline": {
+    "age": 42,
+    "sex": "female",
+    "chronicConditions": [],
+    "currentMeds": []
+  },
+  "recentLogs": [],
+  "recurringConditions": [],
+  "pendingTriage": null
+}
