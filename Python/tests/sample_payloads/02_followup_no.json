@@ -1,0 +1,22 @@
+{
+  "transcript": "no, no arm pain, started after a big meal",
+  "baseline": {
+    "age": 34,
+    "sex": "female",
+    "chronicConditions": ["mild eczema"],
+    "currentMeds": ["multivitamin"]
+  },
+  "recentLogs": [
+    {
+      "rawAudioText": "chest tight, heart racing, bit nauseous",
+      "detectedConditionId": null,
+      "extractedMetrics": {},
+      "createdAt": "2026-07-16T22:12:00Z"
+    }
+  ],
+  "recurringConditions": [],
+  "pendingTriage": {
+    "condition_id": "acute_myocardial_infarction",
+    "turn": 1
+  }
+}

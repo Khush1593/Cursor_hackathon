@@ -1,0 +1,12 @@
+{
+  "transcript": "my face is drooping and speech slurred",
+  "baseline": {
+    "age": 58,
+    "sex": "male",
+    "chronicConditions": ["hypertension"],
+    "currentMeds": ["lisinopril"]
+  },
+  "recentLogs": [],
+  "recurringConditions": [],
+  "pendingTriage": null
+}
