@@ -1,43 +1,72 @@
+/**
+ * User dashboard, emergency reset, data export/delete.
+ * Identity from JWT cookie; :userId path must match (OwnershipGuard).
+ */
 import {
   Controller,
   Get,
   Patch,
   Delete,
   Param,
-  Body,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiCookieAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { ResetEmergencyDto } from './dto/reset-emergency.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OwnershipGuard } from '../common/guards/ownership.guard';
+import { CurrentUser } from '../common/decorators';
+import { AuthUser } from '../common/types';
+import { ACCESS_COOKIE } from '../auth/auth.constants';
 
-/**
- * User dashboard, emergency reset, data export/delete.
- * @see project_knowledge.md §10.1
- */
+@ApiTags('users')
 @Controller('users')
 @UseGuards(JwtAuthGuard, OwnershipGuard)
+@ApiCookieAuth(ACCESS_COOKIE)
+@ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get(':userId/dashboard')
-  getDashboard(@Param('userId') userId: string) {
+  @ApiOperation({
+    summary: 'Dashboard bootstrap (7-day metrics + recent messages)',
+  })
+  getDashboard(
+    @Param('userId') userId: string,
+    @CurrentUser() _user: AuthUser,
+  ) {
     return this.usersService.getDashboard(userId);
   }
 
   @Patch('reset-emergency')
-  resetEmergency(@Body() dto: ResetEmergencyDto) {
-    return this.usersService.resetEmergency(dto.userId);
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clear emergency lock (Crisis Handled / Dismiss)' })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: { is_emergency_state: false, active_mode: 'preventive' },
+    },
+  })
+  resetEmergency(@CurrentUser() user: AuthUser) {
+    return this.usersService.resetEmergency(user.userId);
   }
 
   @Get(':userId/export')
-  exportData(@Param('userId') userId: string) {
+  @ApiOperation({ summary: 'Export all user data (portability)' })
+  exportData(@Param('userId') userId: string, @CurrentUser() _user: AuthUser) {
     return this.usersService.exportData(userId);
   }
 
   @Delete(':userId/data')
-  deleteData(@Param('userId') userId: string) {
+  @ApiOperation({ summary: 'Delete HealthLog + ExaInsight rows for user' })
+  deleteData(@Param('userId') userId: string, @CurrentUser() _user: AuthUser) {
     return this.usersService.deleteData(userId);
   }
 }

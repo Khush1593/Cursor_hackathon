@@ -329,7 +329,8 @@ a detail to gloss over.
   - Link: `{FRONTEND_ORIGIN}/reset-password?token=...`
   - SMTP via `MAIL_*` env; without SMTP, JSON transport logs the message in dev
 - Passport JWT strategy extracts cookie first, then optional `Authorization: Bearer` (Swagger)
-- Row-level ownership: resolve `userId` from JWT/`request.user`, never trust client body for auth
+- **OwnershipGuard (implemented):** path `:userId` / residual `body.userId` must match JWT or `403`
+- PHI request bodies do **not** include `userId` — identity is always from the cookie JWT
 - Frontend must call APIs with `credentials: 'include'` / `withCredentials: true`
 - Full FE contract: [`Backend/api_documentation.md`](../Backend/api_documentation.md)
 - Interactive docs: `GET /api/docs` (Swagger)
@@ -418,11 +419,12 @@ build and one of the highest trust-signal-per-hour additions available.
 }
 ```
 
-#### `POST /api/consent` (NEW)
+#### `POST /api/consent`
+
+**Auth required.** `userId` is taken from the JWT cookie — do **not** send `userId` in the body.
 
 ```json
 {
-  "userId": "uuid-string",
   "consentType": "data_collection",
   "granted": true,
   "version": "v1"
@@ -462,11 +464,10 @@ build and one of the highest trust-signal-per-hour additions available.
 
 #### `POST /api/triage/turn` (primary, requires auth)
 
-**Request** (voice or text — both feed the same field):
+**Request** (voice or text — both feed the same field). `userId` comes from the JWT cookie — do not send it in the body:
 
 ```json
 {
-  "userId": "uuid-string",
   "transcript": "My chest hurts",
   "inputMode": "voice"
 }
@@ -501,7 +502,7 @@ is visible to the user, not a black box.
 
 #### `PATCH /api/users/reset-emergency`
 
-Request: `{ "userId": "uuid-string" }`
+No body — userId from JWT.  
 Response: `{ "is_emergency_state": false, "active_mode": "preventive" }`
 
 #### `DELETE /api/users/:userId/data` (NEW) — see Section 9.5
@@ -510,9 +511,10 @@ Response: `{ "is_emergency_state": false, "active_mode": "preventive" }`
 
 #### `POST /api/feedback` (NEW)
 
+`userId` from JWT — do not send in body:
+
 ```json
 {
-  "userId": "uuid-string",
   "healthLogId": "uuid-string",
   "flaggedIncorrect": true,
   "note": "optional"

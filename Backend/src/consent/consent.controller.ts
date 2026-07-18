@@ -1,20 +1,33 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiCookieAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ConsentService } from './consent.service';
 import { CreateConsentDto } from './dto/create-consent.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OwnershipGuard } from '../common/guards/ownership.guard';
+import { CurrentUser } from '../common/decorators';
+import { AuthUser } from '../common/types';
+import { ACCESS_COOKIE } from '../auth/auth.constants';
 
-/**
- * First-run consent recording.
- * @see project_knowledge.md §9.6 / §10.1 POST /api/consent
- */
+@ApiTags('consent')
 @Controller('consent')
 @UseGuards(JwtAuthGuard, OwnershipGuard)
+@ApiCookieAuth(ACCESS_COOKIE)
+@ApiBearerAuth()
 export class ConsentController {
   constructor(private readonly consentService: ConsentService) {}
 
   @Post()
-  create(@Body() dto: CreateConsentDto) {
-    return this.consentService.record(dto);
+  @ApiOperation({ summary: 'Record a consent decision' })
+  @ApiBody({ type: CreateConsentDto })
+  @ApiResponse({ status: 201 })
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateConsentDto) {
+    return this.consentService.record(user.userId, dto);
   }
 }
