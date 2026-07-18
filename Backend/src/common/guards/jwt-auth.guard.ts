@@ -1,13 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 
 /**
- * JWT auth guard stub — validate Bearer token and attach AuthUser to request.
- * Implementation comes in the auth feature pass.
+ * Validates HTTP-only access cookie (or Bearer for Swagger) via JwtStrategy.
+ * Attaches AuthUser to request.user.
  */
 @Injectable()
-export class JwtAuthGuard implements CanActivate {
-  canActivate(_context: ExecutionContext): boolean {
-    // TODO: implement passport-jwt strategy
-    return true;
-  }
-}
+export class JwtAuthGuard extends AuthGuard('jwt') {}

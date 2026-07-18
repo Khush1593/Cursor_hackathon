@@ -39,6 +39,11 @@ export const AUDIT_ACTIONS = [
   'consent_recorded',
   'feedback_flagged',
   'login',
+  'register',
+  'logout',
+  'forgot_password',
+  'reset_password',
+  'token_refresh',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
