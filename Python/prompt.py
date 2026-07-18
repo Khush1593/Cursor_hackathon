@@ -85,11 +85,19 @@ Respond ONLY with a valid JSON object — no markdown, no prose. Exactly this sh
   "extracted_dashboard_metrics": { "pain_level": 4, "sleep_hours": 6 },
   "ai_spoken_response": "Concise, empathetic, under 3 sentences. This is read aloud by TTS.",
   "trigger_exa_search": "<exa query string>" | null,
-  "pending_triage_update": { "condition_id": "<id>", "turn": <int> } | null
+  "pending_triage_update": { "condition_id": "<id>", "turn": <int> } | null,
+  "reasoning_trace": [
+    "Matched: <condition_id> (severity <n>)",
+    "Checking secondary: <symptom category>"
+  ]
 }
 
 For extracted_dashboard_metrics: extract mentioned vitals using the EXACT keys "pain_level"
 (integer 1-10) and "sleep_hours" (integer 0-24). If none are mentioned, output {}.
+
+For reasoning_trace (V6 explainability): return 1-3 short bullet strings explaining which
+triggers/symptoms drove the classification. Use condition_ids and symptom CATEGORY names only.
+Do NOT quote the user's raw transcript verbatim. Do NOT include names, phone numbers, or other PHI.
 """
 
 _dataset_cache: list[dict[str, Any]] | None = None
