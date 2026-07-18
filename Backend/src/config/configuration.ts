@@ -30,6 +30,11 @@ export default () => ({
     exposeResetToken: process.env.MAIL_DEV_EXPOSE_TOKEN === 'true',
   },
   pythonServiceUrl: process.env.PYTHON_SERVICE_URL ?? 'http://localhost:8000',
+  /** Nest→Python fetch timeout — must exceed Gemini 45s ceiling (+ repair margin). */
+  pythonServiceTimeoutMs: parseInt(
+    process.env.PYTHON_SERVICE_TIMEOUT_MS ?? '50000',
+    10,
+  ),
   useAiStub: process.env.USE_AI_STUB === 'true',
   exaApiKey: process.env.EXA_API_KEY ?? '',
   elevenLabs: {

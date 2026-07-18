@@ -606,7 +606,8 @@ Exact step order (updated with auth + audit + rate limit):
 2. **Rate-limit check** — cap AI/TTS calls per user per minute (protects API budget)
 3. Load `User` (baseline, `pendingTriage`, state)
 4. Query last-7-days `HealthLog` → `recentLogs`; run trend SQL → `recurringConditions`
-5. Build `TriageRequest`; POST to Python (or stub if `USE_AI_STUB=true`)
+5. Build `TriageRequest`; POST to Python (or stub if `USE_AI_STUB=true`) with
+   `PYTHON_SERVICE_TIMEOUT_MS` ≥ 50000 (covers Gemini ~45s ceiling + repair margin)
 6. Validate with Zod; on failure → step 12 (fallback)
 7. If `trigger_exa_search` set → Exa → `exa_insight` (+ persist `ExaInsight` row)
 8. ElevenLabs TTS → `audio_base64` (on TTS failure: `null`, do not crash)
@@ -729,6 +730,7 @@ MAIL_USER=...
 MAIL_PASS=...
 MAIL_FROM="Aura <noreply@aura.health>"
 USE_AI_STUB=false
+PYTHON_SERVICE_TIMEOUT_MS=50000   # Nest→Python; must exceed Gemini ~45s ceiling
 RATE_LIMIT_PER_MINUTE=10
 ```
 

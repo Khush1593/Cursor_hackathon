@@ -478,3 +478,35 @@ API 401 interceptor
 ## 8. Swagger
 
 Open `http://localhost:3000/api/docs` after starting the Backend. Use the cookie auth scheme `aura_access_token` or Bearer after logging in via the login endpoint (browser will store cookies for “Try it out” on same origin).
+
+---
+
+## 9. API list (quick reference)
+
+Base path: `/api`. Auth = access cookie (or Bearer) required unless noted.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/api/health` | No | Liveness probe |
+| `POST` | `/api/auth/register` | No | Create account + set cookies |
+| `POST` | `/api/auth/login` | No | Login + set cookies |
+| `POST` | `/api/auth/logout` | Yes | Clear cookies + revoke refresh |
+| `POST` | `/api/auth/refresh` | Refresh cookie | Rotate access + refresh cookies |
+| `GET` | `/api/auth/me` | Yes | Current user |
+| `POST` | `/api/auth/forgot-password` | No | Email reset link |
+| `POST` | `/api/auth/reset-password` | No | Set new password from token |
+| `POST` | `/api/consent` | Yes | Record a consent decision |
+| `GET` | `/api/consent/status` | Yes | Latest consents (ConsentGate) |
+| `POST` | `/api/triage/turn` | Yes | Symptom triage turn (voice/text) |
+| `GET` | `/api/users/:userId/dashboard` | Yes* | Dashboard metrics + recent messages |
+| `GET` | `/api/users/:userId/history` | Yes* | Paginated conversation history |
+| `POST` | `/api/users/handoff` | Yes | Talk to a human |
+| `POST` | `/api/users/location` | Yes | Share geolocation (nearest ER) |
+| `PATCH` | `/api/users/reset-emergency` | Yes | Clear emergency lock |
+| `GET` | `/api/users/:userId/export` | Yes* | Export user data |
+| `DELETE` | `/api/users/:userId/data` | Yes* | Delete health/insight data |
+| `POST` | `/api/feedback` | Yes | Flag incorrect triage result |
+
+\* `:userId` must match the JWT user or the API returns `403`.
+
+Interactive docs: `http://localhost:3000/api/docs`
