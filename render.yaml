@@ -1,9 +1,10 @@
-# Render Blueprint — Aura monorepo (replaces docker-compose on Render)
+# Render Blueprint — Aura (FREE-tier friendly)
 #
-# Render does NOT import docker-compose.yml directly.
-# Push this file to GitHub, then: Dashboard → New → Blueprint → select this repo.
+# Important Render free-plan limits:
+# - Private services (type: pserv) are NOT allowed on free → Python is a public web service
+# - Free web services cannot RECEIVE private-network traffic → use public https://*.onrender.com URLs
 #
-# Docs: https://render.com/docs/infrastructure-as-code
+# Push to GitHub → Dashboard → New → Blueprint → this repo / render.yaml
 
 databases:
   - name: aura-db
@@ -12,20 +13,23 @@ databases:
     user: aura_user
 
 services:
-  # ── Python AI (private — only Nest calls it) ───────────
-  - type: pserv
+  # ── Python AI (public web — free plan cannot use pserv) ─
+  - type: web
     name: aura-python
     runtime: docker
     plan: free
+    region: oregon
     dockerfilePath: ./Python/Dockerfile
     dockerContext: ./Python
-    # Render sets PORT (usually 10000); bind to it so Nest can reach this service
-    dockerCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    # Render injects PORT (often 10000)
+    dockerCommand: sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"
     envVars:
       - key: GEMINI_API_KEY
         sync: false
       - key: MODEL_NAME
         value: gemini-2.5-flash
+      # Use stub=1 if you have no Gemini key yet (service will still boot)
       - key: USE_AI_STUB
         value: "0"
       - key: LLM_TIMEOUT_SECONDS
@@ -37,11 +41,12 @@ services:
       - key: ELEVENLABS_MODEL_ID
         value: eleven_multilingual_v2
 
-  # ── NestJS API (public HTTPS) ──────────────────────────
+  # ── NestJS API ─────────────────────────────────────────
   - type: web
     name: aura-backend
     runtime: docker
     plan: free
+    region: oregon
     dockerfilePath: ./Backend/Dockerfile
     dockerContext: ./Backend
     healthCheckPath: /api/health
@@ -50,8 +55,7 @@ services:
         value: production
       - key: COOKIE_SECURE
         value: "true"
-      # After first deploy, set this to your frontend public URL, e.g.
-      # https://aura-frontend.onrender.com
+      # Set AFTER frontend URL exists, e.g. https://aura-frontend.onrender.com
       - key: FRONTEND_ORIGIN
         sync: false
       - key: JWT_SECRET
@@ -64,10 +68,9 @@ services:
         fromDatabase:
           name: aura-db
           property: connectionString
-      # Private service DNS on Render: http://<service-name>:<PORT>
-      # Default Docker PORT on Render is 10000
+      # Free tier: must use PUBLIC URL (not private hostname)
       - key: PYTHON_SERVICE_URL
-        value: http://aura-python:10000
+        value: https://aura-python.onrender.com
       - key: PYTHON_SERVICE_TIMEOUT_MS
         value: "50000"
       - key: USE_AI_STUB
@@ -95,19 +98,20 @@ services:
       - key: MAIL_DEV_EXPOSE_TOKEN
         value: "false"
 
-  # ── Next.js UI (public HTTPS) ──────────────────────────
+  # ── Next.js UI ─────────────────────────────────────────
   - type: web
     name: aura-frontend
     runtime: docker
     plan: free
+    region: oregon
     dockerfilePath: ./Frontend/Dockerfile
     dockerContext: ./Frontend
+    healthCheckPath: /
     envVars:
       - key: HOSTNAME
         value: "0.0.0.0"
-      # Render passes envVars as Docker build ARGs automatically (no dockerBuildArgs field).
-      # Next rewrite target = Nest on Render's private network (PORT defaults to 10000).
+      # Free tier: Next rewrite must hit Nest PUBLIC URL (build arg via envVars)
       - key: NEXT_PUBLIC_API_URL
-        value: http://aura-backend:10000
+        value: https://aura-backend.onrender.com
       - key: NEXT_PUBLIC_USE_MOCK
         value: "0"

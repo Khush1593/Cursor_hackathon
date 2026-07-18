@@ -19,8 +19,9 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HUSKY=0
+# Render sets PORT at runtime (often 10000); don't hard-require 3000
+ENV PORT=3000
 
-# No wget in alpine by default — healthcheck uses Node fetch instead
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
@@ -31,7 +32,8 @@ RUN chmod +x ./docker-entrypoint.sh
 
 EXPOSE 3000
 
+# Healthcheck uses $PORT so it works on Render (10000) and local (3000)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "const p=process.env.PORT||3000; fetch('http://127.0.0.1:'+p+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
