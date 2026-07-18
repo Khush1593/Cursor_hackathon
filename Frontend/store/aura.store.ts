@@ -7,16 +7,30 @@
 
 import { create } from "zustand";
 import {
+  ApiError,
   type AuthUser,
+  type ConsentType,
+  type HistorySession,
+  type HandoffResponse,
+  type InputMode,
+  type NearestEr,
   type TurnResponse as ApiTurnResponse,
   fetchDashboard,
+  fetchHistory,
+  getConsentStatus,
   getMe,
-  logout as apiLogout,
-  patchResetEmergency,
-  postTriageTurn,
   isMockTriage,
+  logout as apiLogout,
+  normalizeConsentStatus,
+  patchResetEmergency,
+  postConsent,
+  postFeedback,
+  postHandoff,
+  postLocation,
+  postTriageTurn,
+  setOnAuthFailure,
 } from "@/lib/api";
-import { play } from "@/lib/audio";
+import { speakReply } from "@/lib/audio";
 
 export type Tier = "preventive" | "urgent_care" | "emergency";
 
@@ -43,6 +57,8 @@ export type User = {
   email?: string;
   age: number;
   sex: string;
+  chronicConditions?: string[];
+  currentMeds?: string[];
   emergencyContactName?: string;
   emergencyContactPhone?: string;
 };
@@ -50,6 +66,10 @@ export type User = {
 export type TurnResponse = ApiTurnResponse;
 
 export type AuthStatus = "unknown" | "authenticated" | "unauthenticated";
+
+export type ConsentMap = Record<ConsentType, boolean | null>;
+
+export type DashboardTab = "overview" | "history" | "care";
 
 export interface AuraState {
   authStatus: AuthStatus;
@@ -60,10 +80,25 @@ export interface AuraState {
   messages: Msg[];
   metrics: Point[];
   currentExa: Exa;
+  reasoning: string[];
   isRecording: boolean;
   isProcessing: boolean;
   liveTranscript: string;
   booted: boolean;
+  apiError: string | null;
+  lastCoords: { latitude: number; longitude: number } | null;
+  nearestEr: NearestEr | null;
+  askShareLocation: boolean;
+  consents: ConsentMap;
+  consentsLoaded: boolean;
+  historySessions: HistorySession[];
+  historyCursor: string | null;
+  historyHasMore: boolean;
+  historyLoading: boolean;
+  handoff: HandoffResponse | null;
+  handoffBusy: boolean;
+  feedbackBusyId: string | null;
+  activeTab: DashboardTab;
 
   hydrateFromAuthUser: (user: AuthUser) => void;
   clearSession: () => void;
@@ -72,9 +107,19 @@ export interface AuraState {
   bootstrapDashboard: () => Promise<void>;
   setRecording: (v: boolean) => void;
   setLiveTranscript: (t: string) => void;
-  sendTurn: (transcript: string) => Promise<void>;
+  setActiveTab: (tab: DashboardTab) => void;
+  clearApiError: () => void;
+  sendTurn: (transcript: string, inputMode?: InputMode) => Promise<void>;
   applyResponse: (res: TurnResponse) => void;
   resetEmergency: () => Promise<void>;
+  loadConsents: () => Promise<void>;
+  grantConsents: (types: ConsentType[]) => Promise<boolean>;
+  denyConsents: (types: ConsentType[]) => Promise<void>;
+  loadHistory: (reset?: boolean) => Promise<void>;
+  flagFeedback: (healthLogId: string, note?: string) => Promise<boolean>;
+  requestHandoff: (note?: string) => Promise<boolean>;
+  shareLocation: () => Promise<boolean>;
+  clearHealthDataLocally: () => void;
 }
 
 function isoDaysAgo(days: number): string {
@@ -82,6 +127,12 @@ function isoDaysAgo(days: number): string {
   d.setDate(d.getDate() - days);
   return d.toISOString().slice(0, 10);
 }
+
+const EMPTY_CONSENTS: ConsentMap = {
+  data_collection: null,
+  third_party_sharing: null,
+  voice_recording: null,
+};
 
 const SEED_METRICS: Point[] = [
   { date: isoDaysAgo(6), pain_level: 6, sleep_hours: 5 },
@@ -101,6 +152,22 @@ const SEED_MESSAGES: Msg[] = [
   },
 ];
 
+const SEED_HISTORY: HistorySession[] = [
+  {
+    date: isoDaysAgo(0),
+    entries: [
+      {
+        id: "seed-1",
+        createdAt: new Date().toISOString(),
+        detectedMode: "preventive",
+        detectedConditionId: null,
+        userMessage: "Feeling alright today",
+        auraReply: "Glad you're checking in. I'm here whenever something feels off.",
+      },
+    ],
+  },
+];
+
 function mockTurn(transcript: string): TurnResponse {
   const t = transcript.toLowerCase();
 
@@ -114,6 +181,13 @@ function mockTurn(transcript: string): TurnResponse {
       is_emergency_state: true,
       updated_metrics: { pain_level: 9, sleep_hours: null },
       exa_insight: null,
+      reasoning_trace: [
+        "Matched: acute_myocardial_infarction (severity 10)",
+        "Emergency bypass — no follow-up needed",
+        "Escalating to emergency care",
+      ],
+      ask_share_location: true,
+      nearest_er: null,
     };
   }
 
@@ -127,6 +201,11 @@ function mockTurn(transcript: string): TurnResponse {
       is_emergency_state: false,
       updated_metrics: { pain_level: 6, sleep_hours: null },
       exa_insight: null,
+      reasoning_trace: [
+        "Matched: tension_headache (severity 3), meningitis (severity 9)",
+        "Ruling out red flags before downgrading",
+        "Checking secondary: sudden onset, stiff neck, vision changes",
+      ],
     };
   }
 
@@ -145,6 +224,11 @@ function mockTurn(transcript: string): TurnResponse {
         summary:
           "Consistent sleep and wake times, a cool dark room, and limiting screens before bed measurably improve sleep quality over a few weeks.",
       },
+      reasoning_trace: [
+        "Matched: sleep_disturbance (severity 2)",
+        "No red-flag secondaries present",
+        "Resolving as preventive — researching guidance",
+      ],
     };
   }
 
@@ -157,6 +241,7 @@ function mockTurn(transcript: string): TurnResponse {
     is_emergency_state: false,
     updated_metrics: null,
     exa_insight: null,
+    reasoning_trace: null,
   };
 }
 
@@ -166,208 +251,547 @@ function toUser(u: AuthUser): User {
     email: u.email,
     age: u.age,
     sex: u.sex,
+    chronicConditions: u.chronicConditions,
+    currentMeds: u.currentMeds,
     emergencyContactName: u.emergencyContactName ?? undefined,
     emergencyContactPhone: u.emergencyContactPhone ?? undefined,
   };
 }
 
-export const useAuraStore = create<AuraState>((set, get) => ({
-  authStatus: "unknown",
-  userId: "",
-  user: null,
-  mode: "preventive",
-  isEmergency: false,
-  messages: [],
-  metrics: [],
-  currentExa: null,
-  isRecording: false,
-  isProcessing: false,
-  liveTranscript: "",
-  booted: false,
+function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  if (window.location.pathname === "/login") return;
+  window.location.assign("/login");
+}
 
-  hydrateFromAuthUser: (authUser) => {
-    set({
-      authStatus: "authenticated",
-      userId: authUser.id,
-      user: toUser(authUser),
-      mode: authUser.activeMode,
-      isEmergency: authUser.isEmergencyState,
-      booted: false,
-    });
-  },
-
-  clearSession: () => {
-    set({
-      authStatus: "unauthenticated",
-      userId: "",
-      user: null,
-      mode: "preventive",
-      isEmergency: false,
-      messages: [],
-      metrics: [],
-      currentExa: null,
-      booted: false,
-      isRecording: false,
-      isProcessing: false,
-      liveTranscript: "",
-    });
-  },
-
-  restoreSession: async () => {
-    try {
-      const me = await getMe();
-      get().hydrateFromAuthUser(me);
-      return true;
-    } catch {
+export const useAuraStore = create<AuraState>((set, get) => {
+  if (typeof window !== "undefined") {
+    setOnAuthFailure(() => {
       get().clearSession();
-      return false;
-    }
-  },
-
-  logout: async () => {
-    try {
-      await apiLogout();
-    } catch {
-      /* still clear local session */
-    }
-    get().clearSession();
-  },
-
-  bootstrapDashboard: async () => {
-    if (get().booted) return;
-    const { userId, user } = get();
-
-    if (isMockTriage()) {
-      set({
-        booted: true,
-        metrics: SEED_METRICS,
-        messages: SEED_MESSAGES,
-        currentExa: null,
-        mode: get().mode || "preventive",
-        isEmergency: get().isEmergency,
-      });
-      return;
-    }
-
-    if (!userId) return;
-
-    try {
-      const dash = await fetchDashboard(userId);
-      set({
-        booted: true,
-        mode: dash.user.activeMode,
-        isEmergency: dash.user.isEmergencyState,
-        user: {
-          id: dash.user.id,
-          email: user?.email,
-          age: dash.user.age,
-          sex: dash.user.sex,
-          emergencyContactName: dash.user.emergencyContactName ?? undefined,
-          emergencyContactPhone: dash.user.emergencyContactPhone ?? undefined,
-        },
-        metrics: dash.metricsHistory,
-        messages: dash.recentMessages,
-        currentExa: null,
-      });
-    } catch {
-      // Backend dashboard not ready yet — fall back to seed so UI still works.
-      set({
-        booted: true,
-        metrics: SEED_METRICS,
-        messages: SEED_MESSAGES,
-      });
-    }
-  },
-
-  setRecording: (v) => set({ isRecording: v }),
-  setLiveTranscript: (t) => set({ liveTranscript: t }),
-
-  sendTurn: async (transcript) => {
-    const clean = transcript.trim();
-    if (!clean) return;
-
-    const now = new Date().toISOString();
-    set((s) => ({
-      messages: [...s.messages, { role: "user", text: clean, createdAt: now }],
-      isProcessing: true,
-      liveTranscript: "",
-    }));
-
-    try {
-      let res: TurnResponse;
-      if (isMockTriage()) {
-        await new Promise((r) => setTimeout(r, 700));
-        res = mockTurn(clean);
-      } else {
-        res = await postTriageTurn(get().userId, clean);
-      }
-      get().applyResponse(res);
-      play(res.audio_base64);
-    } catch {
-      get().applyResponse({
-        action_type: "general_response",
-        detected_mode: get().mode,
-        ai_spoken_response:
-          "I couldn't reach the care service just now. Please try again in a moment.",
-        audio_base64: null,
-        is_emergency_state: get().isEmergency,
-        updated_metrics: null,
-        exa_insight: null,
-      });
-    } finally {
-      set({ isProcessing: false });
-    }
-  },
-
-  applyResponse: (res) => {
-    const now = new Date().toISOString();
-    const today = new Date().toISOString().slice(0, 10);
-
-    set((s) => {
-      let metrics = s.metrics;
-      if (res.updated_metrics) {
-        const { pain_level, sleep_hours } = res.updated_metrics;
-        const idx = metrics.findIndex((p) => p.date === today);
-        const base: Point =
-          idx >= 0 ? metrics[idx] : { date: today, pain_level: null, sleep_hours: null };
-        const merged: Point = {
-          date: today,
-          pain_level: pain_level ?? base.pain_level,
-          sleep_hours: sleep_hours ?? base.sleep_hours,
-        };
-        metrics =
-          idx >= 0
-            ? metrics.map((p, i) => (i === idx ? merged : p))
-            : [...metrics, merged];
-      }
-
-      return {
-        mode: res.detected_mode,
-        isEmergency: res.is_emergency_state,
-        messages: [
-          ...s.messages,
-          { role: "aura", text: res.ai_spoken_response, createdAt: now },
-        ],
-        metrics,
-        currentExa: res.exa_insight ?? s.currentExa,
-      };
+      redirectToLogin();
     });
-  },
+  }
 
-  resetEmergency: async () => {
-    const { userId } = get();
-    if (!isMockTriage() && userId) {
+  return {
+    authStatus: "unknown",
+    userId: "",
+    user: null,
+    mode: "preventive",
+    isEmergency: false,
+    messages: [],
+    metrics: [],
+    currentExa: null,
+    reasoning: [],
+    isRecording: false,
+    isProcessing: false,
+    liveTranscript: "",
+    booted: false,
+    apiError: null,
+    lastCoords: null,
+    nearestEr: null,
+    askShareLocation: false,
+    consents: { ...EMPTY_CONSENTS },
+    consentsLoaded: false,
+    historySessions: [],
+    historyCursor: null,
+    historyHasMore: false,
+    historyLoading: false,
+    handoff: null,
+    handoffBusy: false,
+    feedbackBusyId: null,
+    activeTab: "overview",
+
+    hydrateFromAuthUser: (authUser) => {
+      set({
+        authStatus: "authenticated",
+        userId: authUser.id,
+        user: toUser(authUser),
+        mode: authUser.activeMode,
+        isEmergency: authUser.isEmergencyState,
+        booted: false,
+        apiError: null,
+      });
+    },
+
+    clearSession: () => {
+      set({
+        authStatus: "unauthenticated",
+        userId: "",
+        user: null,
+        mode: "preventive",
+        isEmergency: false,
+        messages: [],
+        metrics: [],
+        currentExa: null,
+        reasoning: [],
+        booted: false,
+        isRecording: false,
+        isProcessing: false,
+        liveTranscript: "",
+        apiError: null,
+        lastCoords: null,
+        nearestEr: null,
+        askShareLocation: false,
+        consents: { ...EMPTY_CONSENTS },
+        consentsLoaded: false,
+        historySessions: [],
+        historyCursor: null,
+        historyHasMore: false,
+        handoff: null,
+        activeTab: "overview",
+      });
+    },
+
+    restoreSession: async () => {
       try {
-        const res = await patchResetEmergency(userId);
+        const me = await getMe();
+        get().hydrateFromAuthUser(me);
+        return true;
+      } catch {
+        get().clearSession();
+        return false;
+      }
+    },
+
+    logout: async () => {
+      try {
+        await apiLogout();
+      } catch {
+        /* still clear local session */
+      }
+      get().clearSession();
+    },
+
+    bootstrapDashboard: async () => {
+      if (get().booted) return;
+      const { userId, user } = get();
+
+      if (isMockTriage()) {
         set({
-          isEmergency: res.is_emergency_state,
-          mode: res.active_mode,
+          booted: true,
+          metrics: SEED_METRICS,
+          messages: SEED_MESSAGES,
+          currentExa: null,
+          mode: get().mode || "preventive",
+          isEmergency: get().isEmergency,
+          consents: {
+            data_collection: true,
+            voice_recording: true,
+            third_party_sharing: true,
+          },
+          consentsLoaded: true,
+          historySessions: SEED_HISTORY,
+          historyHasMore: false,
+          historyCursor: null,
+          apiError: null,
         });
         return;
+      }
+
+      if (!userId) return;
+
+      try {
+        const dash = await fetchDashboard(userId);
+        set({
+          booted: true,
+          mode: dash.user.activeMode,
+          isEmergency: dash.user.isEmergencyState,
+          user: {
+            id: dash.user.id,
+            email: user?.email,
+            age: dash.user.age,
+            sex: dash.user.sex,
+            emergencyContactName: dash.user.emergencyContactName ?? undefined,
+            emergencyContactPhone: dash.user.emergencyContactPhone ?? undefined,
+          },
+          metrics: dash.metricsHistory,
+          messages: dash.recentMessages,
+          currentExa: null,
+          apiError: null,
+        });
+        await get().loadConsents();
+      } catch (err) {
+        set({
+          booted: true,
+          apiError:
+            err instanceof ApiError
+              ? err.message
+              : "Could not load your dashboard. Check the API connection.",
+          metrics: [],
+          messages: [],
+        });
+      }
+    },
+
+    setRecording: (v) => set({ isRecording: v }),
+    setLiveTranscript: (t) => set({ liveTranscript: t }),
+    setActiveTab: (tab) => set({ activeTab: tab }),
+    clearApiError: () => set({ apiError: null }),
+
+    loadConsents: async () => {
+      if (isMockTriage()) {
+        set({
+          consents: {
+            data_collection: true,
+            voice_recording: true,
+            third_party_sharing: true,
+          },
+          consentsLoaded: true,
+        });
+        return;
+      }
+      try {
+        const res = await getConsentStatus();
+        set({
+          consents: normalizeConsentStatus(res),
+          consentsLoaded: true,
+        });
       } catch {
-        /* fall through to local reset */
+        set({ consentsLoaded: true });
+      }
+    },
+
+    grantConsents: async (types) => {
+      if (isMockTriage()) {
+        set((s) => {
+          const next = { ...s.consents };
+          for (const t of types) next[t] = true;
+          return { consents: next };
+        });
+        return true;
+      }
+      try {
+        await Promise.all(types.map((t) => postConsent(t, true)));
+        set((s) => {
+          const next = { ...s.consents };
+          for (const t of types) next[t] = true;
+          return { consents: next, apiError: null };
+        });
+        return true;
+      } catch (err) {
+        set({
+          apiError: err instanceof ApiError ? err.message : "Could not save consent.",
+        });
+        return false;
+      }
+    },
+
+    denyConsents: async (types) => {
+      if (!isMockTriage()) {
+        try {
+          await Promise.all(types.map((t) => postConsent(t, false)));
+        } catch {
+          /* keep local deny */
+        }
+      }
+      set((s) => {
+        const next = { ...s.consents };
+        for (const t of types) next[t] = false;
+        return { consents: next };
+      });
+    },
+
+    sendTurn: async (transcript, inputMode = "voice") => {
+      const clean = transcript.trim();
+      if (!clean) return;
+
+      const { consents, lastCoords } = get();
+      if (consents.data_collection !== true) {
+        set({
+          apiError: "Please accept data collection before talking with Aura.",
+          activeTab: "overview",
+        });
+        return;
+      }
+      if (inputMode === "voice" && consents.voice_recording !== true) {
+        set({
+          apiError: "Please accept voice recording before using the microphone.",
+        });
+        return;
+      }
+
+      const now = new Date().toISOString();
+      set((s) => ({
+        messages: [...s.messages, { role: "user", text: clean, createdAt: now }],
+        isProcessing: true,
+        liveTranscript: "",
+        apiError: null,
+      }));
+
+      try {
+        let res: TurnResponse;
+        if (isMockTriage()) {
+          await new Promise((r) => setTimeout(r, 700));
+          res = mockTurn(clean);
+        } else {
+          res = await postTriageTurn({
+            transcript: clean,
+            inputMode,
+            latitude: lastCoords?.latitude,
+            longitude: lastCoords?.longitude,
+          });
+        }
+        get().applyResponse(res);
+        speakReply(res.ai_spoken_response, res.audio_base64);
+      } catch (err) {
+        const message =
+          err instanceof ApiError
+            ? err.message
+            : "I couldn't reach the care service just now. Please try again in a moment.";
+        set({ apiError: message });
+        get().applyResponse({
+          action_type: "general_response",
+          detected_mode: get().mode,
+          ai_spoken_response: message,
+          audio_base64: null,
+          is_emergency_state: get().isEmergency,
+          updated_metrics: null,
+          exa_insight: null,
+          reasoning_trace: null,
+        });
+        speakReply(message, null);
+      } finally {
+        set({ isProcessing: false });
+      }
+    },
+
+    applyResponse: (res) => {
+      const now = new Date().toISOString();
+      const today = new Date().toISOString().slice(0, 10);
+
+      set((s) => {
+        let metrics = s.metrics;
+        if (res.updated_metrics) {
+          const { pain_level, sleep_hours } = res.updated_metrics;
+          const idx = metrics.findIndex((p) => p.date === today);
+          const base: Point =
+            idx >= 0
+              ? metrics[idx]
+              : { date: today, pain_level: null, sleep_hours: null };
+          const merged: Point = {
+            date: today,
+            pain_level: pain_level ?? base.pain_level,
+            sleep_hours: sleep_hours ?? base.sleep_hours,
+          };
+          metrics =
+            idx >= 0
+              ? metrics.map((p, i) => (i === idx ? merged : p))
+              : [...metrics, merged];
+        }
+
+        return {
+          mode: res.detected_mode,
+          isEmergency: res.is_emergency_state,
+          messages: [
+            ...s.messages,
+            { role: "aura", text: res.ai_spoken_response, createdAt: now },
+          ],
+          metrics,
+          currentExa: res.exa_insight ?? s.currentExa,
+          reasoning: res.reasoning_trace ?? [],
+          nearestEr: res.nearest_er ?? s.nearestEr,
+          askShareLocation: !!res.ask_share_location,
+        };
+      });
+    },
+
+    resetEmergency: async () => {
+      if (!isMockTriage()) {
+        try {
+          const res = await patchResetEmergency();
+          set({
+            isEmergency: res.is_emergency_state,
+            mode: res.active_mode,
+            askShareLocation: false,
+          });
+          return;
+        } catch {
+          /* fall through to local reset */
+        }
+      }
+      set({
+        isEmergency: false,
+        mode: "preventive",
+        askShareLocation: false,
+      });
+    },
+
+    loadHistory: async (reset = false) => {
+      const { userId, historyLoading, historyCursor, historyHasMore } = get();
+      if (historyLoading) return;
+      if (!reset && !historyHasMore && historyCursor) return;
+
+      if (isMockTriage()) {
+        set({
+          historySessions: SEED_HISTORY,
+          historyHasMore: false,
+          historyCursor: null,
+          historyLoading: false,
+        });
+        return;
+      }
+
+      if (!userId) return;
+      set({ historyLoading: true });
+      try {
+        const res = await fetchHistory(userId, {
+          limit: 20,
+          days: 30,
+          cursor: reset ? undefined : (historyCursor ?? undefined),
+        });
+        set((s) => ({
+          historySessions: reset
+            ? res.sessions
+            : mergeHistorySessions(s.historySessions, res.sessions),
+          historyCursor: res.nextCursor,
+          historyHasMore: res.hasMore,
+          historyLoading: false,
+          apiError: null,
+        }));
+      } catch (err) {
+        set({
+          historyLoading: false,
+          apiError: err instanceof ApiError ? err.message : "Could not load history.",
+        });
+      }
+    },
+
+    flagFeedback: async (healthLogId, note) => {
+      if (isMockTriage()) return true;
+      set({ feedbackBusyId: healthLogId });
+      try {
+        await postFeedback(healthLogId, true, note);
+        set({ feedbackBusyId: null, apiError: null });
+        return true;
+      } catch (err) {
+        set({
+          feedbackBusyId: null,
+          apiError: err instanceof ApiError ? err.message : "Could not send feedback.",
+        });
+        return false;
+      }
+    },
+
+    requestHandoff: async (note) => {
+      set({ handoffBusy: true });
+      if (isMockTriage()) {
+        const mock: HandoffResponse = {
+          handoffId: "mock-handoff",
+          status: "open",
+          message: "A care coordinator will follow up.",
+          emergencyContact: {
+            name: get().user?.emergencyContactName ?? null,
+            phone: get().user?.emergencyContactPhone ?? null,
+          },
+          createdAt: new Date().toISOString(),
+        };
+        set({ handoff: mock, handoffBusy: false });
+        return true;
+      }
+      try {
+        const res = await postHandoff(note);
+        set({ handoff: res, handoffBusy: false, apiError: null });
+        return true;
+      } catch (err) {
+        set({
+          handoffBusy: false,
+          apiError:
+            err instanceof ApiError ? err.message : "Could not request a human handoff.",
+        });
+        return false;
+      }
+    },
+
+    shareLocation: async () => {
+      if (typeof window === "undefined" || !navigator.geolocation) {
+        set({ apiError: "Location is not available in this browser." });
+        return false;
+      }
+
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 12000,
+          });
+        });
+        const { latitude, longitude } = pos.coords;
+        set({ lastCoords: { latitude, longitude } });
+
+        if (isMockTriage()) {
+          const mockEr: NearestEr = {
+            name: "City General Hospital ER",
+            address: "100 Care Ave",
+            distance_miles: 1.2,
+          };
+          set({
+            nearestEr: mockEr,
+            askShareLocation: false,
+            apiError: null,
+          });
+          return true;
+        }
+
+        const res = await postLocation(latitude, longitude);
+        set({
+          nearestEr: res.nearest_er,
+          askShareLocation: false,
+          apiError: null,
+        });
+        return true;
+      } catch (err) {
+        const geoDenied =
+          typeof err === "object" &&
+          err !== null &&
+          "code" in err &&
+          typeof (err as { code: unknown }).code === "number";
+        const message = geoDenied
+          ? "Location permission denied. You can still call emergency services."
+          : err instanceof ApiError
+            ? err.message
+            : "Could not share location.";
+        set({ apiError: message });
+        return false;
+      }
+    },
+
+    clearHealthDataLocally: () => {
+      set({
+        messages: SEED_MESSAGES.slice(0, 1),
+        metrics: [],
+        currentExa: null,
+        reasoning: [],
+        historySessions: [],
+        historyCursor: null,
+        historyHasMore: false,
+        handoff: null,
+        nearestEr: null,
+      });
+    },
+  };
+});
+
+function mergeHistorySessions(
+  existing: HistorySession[],
+  incoming: HistorySession[],
+): HistorySession[] {
+  const byDate = new Map<string, HistorySession>();
+  for (const s of existing) {
+    byDate.set(s.date, {
+      date: s.date,
+      entries: [...s.entries],
+    });
+  }
+  for (const s of incoming) {
+    const prev = byDate.get(s.date);
+    if (!prev) {
+      byDate.set(s.date, { date: s.date, entries: [...s.entries] });
+    } else {
+      const seen = new Set(prev.entries.map((e) => e.id));
+      for (const e of s.entries) {
+        if (!seen.has(e.id)) prev.entries.push(e);
       }
     }
-    set({ isEmergency: false, mode: "preventive" });
-  },
-}));
+  }
+  return Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
+}

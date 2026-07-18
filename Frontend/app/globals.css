@@ -70,19 +70,19 @@
   --aura-panel-border: rgba(217, 119, 6, 0.22);
 }
 
-/* ---- Tier: emergency (high-contrast red, locks the screen) ---- */
+/* ---- Tier: emergency (readable warm canvas; lock itself is high contrast) ---- */
 [data-tier="emergency"] {
-  --aura-bg-from: #7f1d1d;
-  --aura-bg-via: #991b1b;
-  --aura-bg-to: #b91c1c;
-  --aura-accent: #fecaca;
-  --aura-accent-2: #fca5a5;
-  --aura-accent-soft: rgba(255, 255, 255, 0.16);
-  --aura-glow: rgba(239, 68, 68, 0.65);
-  --aura-ink: #ffffff;
-  --aura-muted: rgba(255, 255, 255, 0.78);
-  --aura-panel: rgba(255, 255, 255, 0.1);
-  --aura-panel-border: rgba(255, 255, 255, 0.28);
+  --aura-bg-from: #fff1f2;
+  --aura-bg-via: #fff7f7;
+  --aura-bg-to: #ffebeb;
+  --aura-accent: #dc2626;
+  --aura-accent-2: #f43f5e;
+  --aura-accent-soft: rgba(220, 38, 38, 0.11);
+  --aura-glow: rgba(220, 38, 38, 0.38);
+  --aura-ink: #4c1015;
+  --aura-muted: #98515a;
+  --aura-panel: rgba(255, 255, 255, 0.76);
+  --aura-panel-border: rgba(220, 38, 38, 0.2);
 }
 
 body {
@@ -119,6 +119,9 @@ body::before {
   border: 1px solid var(--aura-panel-border);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow:
+    0 1px 2px rgba(15, 42, 74, 0.03),
+    0 14px 42px rgba(15, 42, 74, 0.055);
 }
 
 .aura-transition {
@@ -198,6 +201,20 @@ body::before {
 
 .animate-spin-slow {
   animation: spin-slow 1s linear infinite;
+}
+
+.aura-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--aura-panel-border) transparent;
+}
+
+.aura-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.aura-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--aura-panel-border);
 }
 
 @media (prefers-reduced-motion: reduce) {

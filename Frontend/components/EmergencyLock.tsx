@@ -4,15 +4,19 @@ import { useState } from "react";
 import { useAuraStore } from "@/store/aura.store";
 
 /**
- * Full-screen emergency lock. Renders above everything when
- * `isEmergency` is true: 911 call, emergency contact, and a Dismiss that
- * calls resetEmergency() (PATCH /api/users/reset-emergency on integration).
+ * Full-screen emergency lock with 911, emergency contact, location share,
+ * and nearest ER details when available.
  */
 export function EmergencyLock() {
   const isEmergency = useAuraStore((s) => s.isEmergency);
   const user = useAuraStore((s) => s.user);
+  const nearestEr = useAuraStore((s) => s.nearestEr);
+  const askShareLocation = useAuraStore((s) => s.askShareLocation);
   const resetEmergency = useAuraStore((s) => s.resetEmergency);
+  const shareLocation = useAuraStore((s) => s.shareLocation);
+  const apiError = useAuraStore((s) => s.apiError);
   const [dismissing, setDismissing] = useState(false);
+  const [locBusy, setLocBusy] = useState(false);
 
   if (!isEmergency) return null;
 
@@ -23,6 +27,12 @@ export function EmergencyLock() {
     setDismissing(true);
     await resetEmergency();
     setDismissing(false);
+  };
+
+  const onShareLocation = async () => {
+    setLocBusy(true);
+    await shareLocation();
+    setLocBusy(false);
   };
 
   return (
@@ -36,7 +46,6 @@ export function EmergencyLock() {
           "radial-gradient(1200px 700px at 50% -10%, #dc2626, #991b1b 60%, #7f1d1d)",
       }}
     >
-      {/* pulsing alarm vignette */}
       <span
         className="pointer-events-none absolute inset-0"
         style={{
@@ -75,7 +84,7 @@ export function EmergencyLock() {
             className="flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-lg font-bold text-red-700 shadow-lg transition-transform hover:scale-[1.02] active:scale-95"
           >
             <PhoneIcon />
-            Call 911
+            Call emergency services
           </a>
 
           {contactPhone && (
@@ -88,7 +97,34 @@ export function EmergencyLock() {
               <span className="text-white/70">· {contactPhone}</span>
             </a>
           )}
+
+          {(askShareLocation || !nearestEr) && (
+            <button
+              type="button"
+              onClick={() => void onShareLocation()}
+              disabled={locBusy}
+              className="flex items-center justify-center gap-2 rounded-2xl border border-white/40 bg-white/10 px-6 py-3.5 text-base font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/20 disabled:opacity-50"
+            >
+              <PinIcon />
+              {locBusy ? "Finding nearest ER…" : "Share location for nearest ER"}
+            </button>
+          )}
         </div>
+
+        {nearestEr && (
+          <div className="mt-5 rounded-2xl border border-white/30 bg-white/10 p-4 text-left backdrop-blur-sm">
+            <p className="text-xs font-semibold tracking-widest text-white/70 uppercase">
+              Nearest ER
+            </p>
+            <p className="mt-1 text-lg font-semibold">{nearestEr.name}</p>
+            <p className="text-sm text-white/80">{nearestEr.address}</p>
+            <p className="mt-1 text-sm font-medium text-white">
+              ~{nearestEr.distance_miles.toFixed(1)} miles away
+            </p>
+          </div>
+        )}
+
+        {apiError && <p className="mt-3 text-xs text-white/75">{apiError}</p>}
 
         <button
           type="button"
@@ -120,6 +156,23 @@ function PhoneIcon() {
       strokeLinejoin="round"
     >
       <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8 9.5a16 16 0 0 0 6 6l1.1-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z" />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z" />
+      <circle cx="12" cy="10" r="2.5" />
     </svg>
   );
 }

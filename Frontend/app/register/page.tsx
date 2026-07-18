@@ -41,9 +41,17 @@ function RegisterForm() {
   const [sex, setSex] = useState("female");
   const [emergencyContactName, setEmergencyContactName] = useState("");
   const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
+  const [chronicConditions, setChronicConditions] = useState("");
+  const [currentMeds, setCurrentMeds] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<RegisterFields>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const splitList = (raw: string) =>
+    raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
 
   const updateEmail = (v: string) => {
     setEmail(v);
@@ -82,11 +90,15 @@ function RegisterForm() {
 
     setLoading(true);
     try {
+      const conditions = splitList(chronicConditions);
+      const meds = splitList(currentMeds);
       const res = await register({
         email: email.trim(),
         password,
         age: Number(age),
         sex: sex.trim(),
+        chronicConditions: conditions.length ? conditions : undefined,
+        currentMeds: meds.length ? meds : undefined,
         emergencyContactName: emergencyContactName.trim() || undefined,
         emergencyContactPhone: emergencyContactPhone.trim() || undefined,
       });
@@ -155,6 +167,20 @@ function RegisterForm() {
             placeholder="female / male / …"
           />
         </div>
+        <AuthField
+          id="chronicConditions"
+          label="Chronic conditions"
+          value={chronicConditions}
+          onChange={setChronicConditions}
+          placeholder="Optional — comma-separated"
+        />
+        <AuthField
+          id="currentMeds"
+          label="Current medications"
+          value={currentMeds}
+          onChange={setCurrentMeds}
+          placeholder="Optional — comma-separated"
+        />
         <AuthField
           id="emergencyContactName"
           label="Emergency contact name"
