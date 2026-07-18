@@ -1,0 +1,24 @@
+{
+  "name": "cursor_hackathon",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aura hackathon monorepo — frontend lint hooks live here",
+  "scripts": {
+    "prepare": "husky",
+    "lint:frontend": "npm run lint --prefix Frontend",
+    "typecheck:frontend": "npm run typecheck --prefix Frontend"
+  },
+  "lint-staged": {
+    "Frontend/**/*.{ts,tsx}": [
+      "npm run lint --prefix Frontend -- --max-warnings=0",
+      "prettier --write"
+    ],
+    "Frontend/**/*.{css,json,md}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0"
+  }
+}
