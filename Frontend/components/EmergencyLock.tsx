@@ -19,9 +19,9 @@ export function EmergencyLock() {
   const contactName = user?.emergencyContactName;
   const contactPhone = user?.emergencyContactPhone;
 
-  const onDismiss = () => {
+  const onDismiss = async () => {
     setDismissing(true);
-    resetEmergency();
+    await resetEmergency();
     setDismissing(false);
   };
 

@@ -19,6 +19,7 @@ export function PushToTalkButton() {
 
   const [held, setHeld] = useState(false);
   const [typed, setTyped] = useState("");
+  const [typedInvalid, setTypedInvalid] = useState(false);
 
   // Safety: release if the pointer leaves the window mid-press.
   useEffect(() => {
@@ -111,20 +112,36 @@ export function PushToTalkButton() {
 
       {!supported && (
         <form
+          noValidate
           className="flex w-full max-w-sm items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             const value = typed.trim();
-            if (!value || isProcessing) return;
+            if (!value) {
+              setTypedInvalid(true);
+              return;
+            }
+            if (isProcessing) return;
             submitText(value);
             setTyped("");
+            setTypedInvalid(false);
           }}
         >
           <input
             value={typed}
-            onChange={(e) => setTyped(e.target.value)}
+            aria-invalid={typedInvalid}
+            onChange={(e) => {
+              const v = e.target.value;
+              setTyped(v);
+              if (typedInvalid) setTypedInvalid(!v.trim());
+            }}
             placeholder="Voice unavailable — type how you feel"
-            className="aura-panel aura-transition flex-1 rounded-full px-4 py-2 text-sm text-aura-ink outline-none placeholder:text-aura-muted/70 focus:ring-2 focus:ring-aura-accent/40"
+            className={[
+              "aura-transition flex-1 rounded-full bg-white/70 px-4 py-2 text-sm text-aura-ink outline-none placeholder:text-aura-muted/70",
+              typedInvalid
+                ? "border-2 border-red-500 focus:ring-2 focus:ring-red-400/30"
+                : "aura-panel border border-[var(--aura-panel-border)] focus:ring-2 focus:ring-aura-accent/40",
+            ].join(" ")}
           />
           <button
             type="submit"
