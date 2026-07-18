@@ -98,6 +98,11 @@ For extracted_dashboard_metrics: extract mentioned vitals using the EXACT keys "
 For reasoning_trace (V6 explainability): return 1-3 short bullet strings explaining which
 triggers/symptoms drove the classification. Use condition_ids and symptom CATEGORY names only.
 Do NOT quote the user's raw transcript verbatim. Do NOT include names, phone numbers, or other PHI.
+Write bullets like a clinician handoff reason, e.g.:
+  "Matched: stroke_tia (severity 10)"
+  "Escalation: emergency bypass — no further questions"
+  "Checking secondary: radiating arm/jaw pain before deciding"
+Do NOT invent a numeric confidence score (no "87% sure") — reasons only.
 """
 
 _dataset_cache: list[dict[str, Any]] | None = None

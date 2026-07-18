@@ -1,23 +1,67 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  buildClinicalHandoffText,
+  buildRelativeNotifyPreview,
+} from "@/lib/clinicalHandoff";
 import { useAuraStore } from "@/store/aura.store";
 
 /**
- * Full-screen emergency lock. Renders above everything when
- * `isEmergency` is true: 911 call, emergency contact, and a Dismiss that
- * calls resetEmergency() (PATCH /api/users/reset-emergency on integration).
+ * Full-screen emergency lock when `isEmergency` is true.
+ * Shows Aura's AI message, a clinical handoff TEXT card (no QR),
+ * and a "would notify relatives" preview (demo — does not send SMS).
  */
 export function EmergencyLock() {
   const isEmergency = useAuraStore((s) => s.isEmergency);
   const user = useAuraStore((s) => s.user);
+  const messages = useAuraStore((s) => s.messages);
+  const metrics = useAuraStore((s) => s.metrics);
+  const reasoningTrace = useAuraStore((s) => s.lastReasoningTrace);
   const resetEmergency = useAuraStore((s) => s.resetEmergency);
   const [dismissing, setDismissing] = useState(false);
+  const [showHandoff, setShowHandoff] = useState(true);
+
+  const lastUser = useMemo(
+    () => [...messages].reverse().find((m) => m.role === "user"),
+    [messages],
+  );
+  const lastAura = useMemo(
+    () => [...messages].reverse().find((m) => m.role === "aura"),
+    [messages],
+  );
+
+  const handoffText = useMemo(
+    () =>
+      buildClinicalHandoffText({
+        age: user?.age,
+        sex: user?.sex,
+        chronicConditions: user?.chronicConditions,
+        currentMeds: user?.currentMeds,
+        chiefComplaint: lastUser?.text,
+        aiSpoken: lastAura?.text,
+        reasoningTrace,
+        metrics,
+      }),
+    [user, lastUser, lastAura, reasoningTrace, metrics],
+  );
+
+  const notifyPreview = useMemo(
+    () =>
+      buildRelativeNotifyPreview({
+        contactName: user?.emergencyContactName,
+        handoffSummary: handoffText,
+      }),
+    [user?.emergencyContactName, handoffText],
+  );
 
   if (!isEmergency) return null;
 
   const contactName = user?.emergencyContactName;
   const contactPhone = user?.emergencyContactPhone;
+  const aiMessage =
+    lastAura?.text?.trim() ||
+    "Aura detected symptoms that may be life-threatening. Get help now.";
 
   const onDismiss = async () => {
     setDismissing(true);
@@ -30,13 +74,12 @@ export function EmergencyLock() {
       role="alertdialog"
       aria-modal="true"
       aria-label="Emergency"
-      className="fixed inset-0 z-50 flex items-center justify-center px-6"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8"
       style={{
         background:
           "radial-gradient(1200px 700px at 50% -10%, #dc2626, #991b1b 60%, #7f1d1d)",
       }}
     >
-      {/* pulsing alarm vignette */}
       <span
         className="pointer-events-none absolute inset-0"
         style={{
@@ -45,11 +88,11 @@ export function EmergencyLock() {
         }}
       />
 
-      <div className="relative w-full max-w-md text-center text-white">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/15 ring-4 ring-white/30">
+      <div className="relative w-full max-w-lg text-center text-white">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white/15 ring-4 ring-white/30">
           <svg
             viewBox="0 0 24 24"
-            className="h-11 w-11"
+            className="h-9 w-9"
             fill="none"
             stroke="currentColor"
             strokeWidth={2}
@@ -63,13 +106,25 @@ export function EmergencyLock() {
           </svg>
         </div>
 
-        <h1 className="mt-6 text-3xl font-bold tracking-tight">Possible emergency</h1>
-        <p className="mx-auto mt-2 max-w-sm text-white/85">
-          Aura detected symptoms that may be life-threatening. Get help now — don&apos;t
-          wait.
+        <h1 className="mt-5 text-3xl font-bold tracking-tight">Possible emergency</h1>
+
+        {/* Prominent Aura AI message */}
+        <p className="mx-auto mt-4 max-w-md rounded-2xl bg-black/25 px-4 py-3 text-left text-base leading-relaxed text-white shadow-inner ring-1 ring-white/20">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-white/70">
+            Aura says
+          </span>
+          {aiMessage}
         </p>
 
-        <div className="mt-8 flex flex-col gap-3">
+        {reasoningTrace.length > 0 && (
+          <ul className="mx-auto mt-3 max-w-md list-disc space-y-1 px-6 text-left text-sm text-white/85">
+            {reasoningTrace.slice(0, 3).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-6 flex flex-col gap-3">
           <a
             href="tel:911"
             className="flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-lg font-bold text-red-700 shadow-lg transition-transform hover:scale-[1.02] active:scale-95"
@@ -90,6 +145,39 @@ export function EmergencyLock() {
           )}
         </div>
 
+        {/* Clinical handoff TEXT card (no QR) */}
+        <div className="mt-6 text-left">
+          <button
+            type="button"
+            onClick={() => setShowHandoff((v) => !v)}
+            className="w-full rounded-xl border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+          >
+            {showHandoff ? "Hide" : "Show"} 911 / EMT clinical handoff
+          </button>
+
+          {showHandoff && (
+            <pre className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl bg-black/40 px-4 py-3 font-mono text-[12px] leading-relaxed text-white/95 ring-1 ring-white/25">
+              {handoffText}
+            </pre>
+          )}
+        </div>
+
+        {/* Relatives notify preview — demo only, does not send */}
+        <div className="mt-4 rounded-xl border border-amber-200/40 bg-amber-950/30 px-4 py-3 text-left">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-100/80">
+            Relative alert (demo preview — not sent)
+          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-amber-50/95">
+            {notifyPreview}
+          </p>
+          {!contactPhone && (
+            <p className="mt-2 text-xs text-amber-100/70">
+              Add an emergency contact in your profile so Aura can preview who would
+              be notified.
+            </p>
+          )}
+        </div>
+
         <button
           type="button"
           onClick={onDismiss}
@@ -99,9 +187,10 @@ export function EmergencyLock() {
           Crisis handled — dismiss
         </button>
 
-        <p className="mt-6 text-[11px] leading-relaxed text-white/60">
-          Aura is not a medical device and does not diagnose. If you are unsure, always
-          call emergency services.
+        <p className="mt-5 text-[11px] leading-relaxed text-white/60">
+          Aura is not a medical device and does not diagnose. The handoff is structured
+          context for helpers — not a clinical diagnosis. If you are unsure, call
+          emergency services.
         </p>
       </div>
     </div>

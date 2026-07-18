@@ -231,6 +231,8 @@ export type TurnResponse = {
   is_emergency_state: boolean;
   updated_metrics: { pain_level: number | null; sleep_hours: number | null } | null;
   exa_insight: { title: string; url: string; summary: string } | null;
+  /** V6 explainability bullets from Nest/Python (optional for older mocks). */
+  reasoning_trace?: string[];
 };
 
 export function fetchDashboard(userId: string) {
