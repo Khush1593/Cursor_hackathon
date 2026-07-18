@@ -20,6 +20,7 @@ import { TriageMapper } from './triage.mapper';
 import { FallbackService } from './fallback.service';
 import { DatasetService } from './dataset.service';
 import { findNearestEr } from '../common/utils/geo';
+import { FairnessService } from '../fairness/fairness.service';
 import {
   FrontendExaInsight,
   FrontendTriageResponse,
@@ -48,6 +49,7 @@ export class TriageService {
     private readonly dataset: DatasetService,
     private readonly audit: AuditService,
     private readonly consent: ConsentService,
+    private readonly fairness: FairnessService,
     private readonly config: ConfigService,
   ) {}
 
@@ -117,6 +119,14 @@ export class TriageService {
       const rawAi = await this.ai.triage(payload);
       const ai = AuraResponseSchema.parse(rawAi);
 
+      // Durable non-PHI fairness bucket (age/sex + outcome only — never userId/transcript)
+      await this.fairness.recordOutcome({
+        age: user.age,
+        sex: user.sex,
+        actionType: ai.action_type,
+        detectedMode: ai.detected_mode,
+      });
+
       let exaInsight: FrontendExaInsight = null;
       if (ai.action_type === 'resolve' && ai.trigger_exa_search) {
         exaInsight = await this.exa.search(ai.trigger_exa_search);
@@ -185,6 +195,7 @@ export class TriageService {
         isEmergencyState: refreshed.isEmergencyState,
         nearestEr,
         askShareLocation,
+        transcript: dto.transcript,
       });
     } catch (error: unknown) {
       if (
@@ -286,7 +297,11 @@ export class TriageService {
     dto: TriageTurnDto,
     ai: AuraResponse,
   ): Promise<void> {
-    const metrics = this.mapper.sanitizeMetrics(ai.extracted_dashboard_metrics);
+    // Prefer AI metrics; fill pain/sleep from transcript when LLM returns {}
+    const metrics = this.mapper.resolveMetrics(
+      ai.extracted_dashboard_metrics,
+      dto.transcript,
+    );
     const conditionId = ai.detected_condition_id;
     const severity =
       conditionId != null
@@ -310,7 +325,7 @@ export class TriageService {
             detectedMode: ai.detected_mode,
             detectedConditionId: null,
             severityScore: null,
-            extractedMetrics: metrics as Prisma.InputJsonValue,
+            extractedMetrics: metrics,
             aiResponseText: ai.ai_spoken_response,
           },
         }),
@@ -334,7 +349,7 @@ export class TriageService {
             detectedMode: ai.detected_mode,
             detectedConditionId: conditionId,
             severityScore: severity,
-            extractedMetrics: metrics as Prisma.InputJsonValue,
+            extractedMetrics: metrics,
             aiResponseText: ai.ai_spoken_response,
           },
         }),
@@ -358,7 +373,7 @@ export class TriageService {
           detectedMode: 'emergency',
           detectedConditionId: conditionId,
           severityScore: severity,
-          extractedMetrics: metrics as Prisma.InputJsonValue,
+          extractedMetrics: metrics,
           aiResponseText: ai.ai_spoken_response,
         },
       }),

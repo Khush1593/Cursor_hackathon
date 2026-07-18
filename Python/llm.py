@@ -262,6 +262,33 @@ def _stub_response(request: TriageRequest) -> AuraResponse:
                 "Checking secondary: radiating arm/jaw pain or crushing pressure",
             ],
         )
+    if "sleep" in text or "slept" in text:
+        return AuraResponse(
+            action_type="resolve",
+            detected_mode="preventive",
+            detected_condition_id="sleep_hygiene",
+            extracted_dashboard_metrics={"sleep_hours": 5},
+            ai_spoken_response=(
+                "Noted — logging your sleep and keeping an eye on trends."
+            ),
+            trigger_exa_search=None,
+            pending_triage_update=None,
+            reasoning_trace=["Stub: sleep mention → preventive resolve"],
+        )
+    if "pain" in text or "migraine" in text or "ache" in text:
+        return AuraResponse(
+            action_type="resolve",
+            detected_mode="urgent_care",
+            detected_condition_id="migraine_exacerbation",
+            extracted_dashboard_metrics={"pain_level": 6},
+            ai_spoken_response=(
+                "Logged your pain level for trend tracking. "
+                "Rest in a dark room and stay hydrated for now."
+            ),
+            trigger_exa_search=None,
+            pending_triage_update=None,
+            reasoning_trace=["Stub: pain/migraine mention → log vitals"],
+        )
     return AuraResponse(
         action_type="general_response",
         detected_mode="preventive",

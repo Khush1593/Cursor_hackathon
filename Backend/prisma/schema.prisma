@@ -114,3 +114,20 @@ model HumanHandoffRequest {
   status    String   @default("open") // open | acknowledged | closed
   createdAt DateTime @default(now())
 }
+
+/// Non-PHI fairness aggregates (age_band × sex_group × outcome).
+/// Never store user IDs, transcripts, or condition narrative.
+/// Python /fairness/stats is in-memory and resets on restart — Nest owns durable counts.
+model FairnessAggregate {
+  id           String   @id @default(uuid())
+  ageBand      String
+  sexGroup     String
+  actionType   String
+  detectedMode String
+  count        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([ageBand, sexGroup, actionType, detectedMode])
+  @@index([actionType, detectedMode])
+}

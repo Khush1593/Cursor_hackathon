@@ -8,9 +8,16 @@ import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../audit/audit.module';
 import { ConsentModule } from '../consent/consent.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
+import { FairnessModule } from '../fairness/fairness.module';
 
 @Module({
-  imports: [AuthModule, AuditModule, ConsentModule, IntegrationsModule],
+  imports: [
+    AuthModule,
+    AuditModule,
+    ConsentModule,
+    IntegrationsModule,
+    FairnessModule,
+  ],
   controllers: [TriageController],
   providers: [TriageService, TriageMapper, FallbackService, DatasetService],
   exports: [TriageService],

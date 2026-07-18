@@ -5,6 +5,10 @@ import {
   FrontendTriageResponse,
   NearestErResult,
 } from './triage.types';
+import {
+  asFiniteNumber,
+  inferMetricsFromTranscript,
+} from '../common/utils/metrics';
 
 /**
  * Pure transforms: AuraResponse (AI) → frontend triage response shape.
@@ -18,6 +22,8 @@ export class TriageMapper {
     isEmergencyState: boolean;
     nearestEr?: NearestErResult;
     askShareLocation?: boolean;
+    /** Optional transcript — fills pain/sleep when AI left metrics empty. */
+    transcript?: string;
   }): FrontendTriageResponse {
     const {
       ai,
@@ -26,10 +32,16 @@ export class TriageMapper {
       isEmergencyState,
       nearestEr = null,
       askShareLocation = false,
+      transcript,
     } = params;
 
     const isEmergency =
       isEmergencyState || ai.action_type === 'emergency_escalation';
+
+    const updated = this.resolveMetrics(
+      ai.extracted_dashboard_metrics,
+      transcript,
+    );
 
     return {
       action_type: ai.action_type,
@@ -37,7 +49,7 @@ export class TriageMapper {
       ai_spoken_response: ai.ai_spoken_response,
       audio_base64: audioBase64,
       is_emergency_state: isEmergency,
-      updated_metrics: this.sanitizeMetrics(ai.extracted_dashboard_metrics),
+      updated_metrics: updated,
       exa_insight: exaInsight,
       reasoning_trace: ai.reasoning_trace ?? [],
       nearest_er: isEmergency ? nearestEr : null,
@@ -45,13 +57,36 @@ export class TriageMapper {
     };
   }
 
-  sanitizeMetrics(metrics: Record<string, unknown>): Record<string, unknown> {
-    const out: Record<string, unknown> = {};
-    if (typeof metrics.pain_level === 'number') {
-      out.pain_level = metrics.pain_level;
+  /**
+   * Prefer AI metrics; fill gaps from transcript heuristics so the 7-day chart gets data.
+   */
+  resolveMetrics(
+    metrics: Record<string, unknown>,
+    transcript?: string,
+  ): Record<string, number> {
+    const out = this.sanitizeMetrics(metrics);
+    if (!transcript) {
+      return out;
     }
-    if (typeof metrics.sleep_hours === 'number') {
-      out.sleep_hours = metrics.sleep_hours;
+    const inferred = inferMetricsFromTranscript(transcript);
+    if (out.pain_level == null && inferred.pain_level != null) {
+      out.pain_level = inferred.pain_level;
+    }
+    if (out.sleep_hours == null && inferred.sleep_hours != null) {
+      out.sleep_hours = inferred.sleep_hours;
+    }
+    return out;
+  }
+
+  sanitizeMetrics(metrics: Record<string, unknown>): Record<string, number> {
+    const out: Record<string, number> = {};
+    const pain = asFiniteNumber(metrics?.pain_level);
+    const sleep = asFiniteNumber(metrics?.sleep_hours);
+    if (pain != null && pain >= 1 && pain <= 10) {
+      out.pain_level = Math.round(pain);
+    }
+    if (sleep != null && sleep >= 0 && sleep <= 24) {
+      out.sleep_hours = Math.round(sleep);
     }
     return out;
   }
