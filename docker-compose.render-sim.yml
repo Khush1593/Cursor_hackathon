@@ -1,0 +1,127 @@
+# Local simulation of Render free-tier Docker services.
+# Does NOT replace Render — validates builds, $PORT binding, and healthchecks.
+#
+# Usage:
+#   ./scripts/verify-render-local.sh
+#   # or manually:
+#   docker compose -f docker-compose.render-sim.yml up --build
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: aura_user
+      POSTGRES_PASSWORD: aura_password
+      POSTGRES_DB: aura_db
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aura_user -d aura_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - render-sim
+
+  # Mimic Render: process listens on PORT=10000 (not 8000)
+  python_ai:
+    build:
+      context: ./Python
+      dockerfile: Dockerfile
+    environment:
+      PORT: "10000"
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      MODEL_NAME: ${MODEL_NAME:-gemini-2.5-flash}
+      USE_AI_STUB: ${PYTHON_USE_AI_STUB:-1}
+      LLM_TIMEOUT_SECONDS: "45"
+    ports:
+      - "8001:10000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+    networks:
+      - render-sim
+
+  # Mimic Render: Nest listens on PORT=10000
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    environment:
+      PORT: "10000"
+      NODE_ENV: production
+      FRONTEND_ORIGIN: http://localhost:3001
+      DATABASE_URL: postgresql://aura_user:aura_password@postgres:5432/aura_db
+      JWT_SECRET: local-render-sim-secret
+      COOKIE_SECURE: "false"
+      # On real Render free tier this is https://aura-python.onrender.com
+      # Locally we still use Docker DNS (compose private network works; Render free does not)
+      PYTHON_SERVICE_URL: http://python_ai:10000
+      PYTHON_SERVICE_TIMEOUT_MS: "50000"
+      USE_AI_STUB: "false"
+    ports:
+      - "3002:10000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      python_ai:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:10000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+    networks:
+      - render-sim
+
+  # Rebuild Frontend with Render-like public API URL (host-mapped backend)
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+      args:
+        # From browser on host → published backend port
+        NEXT_PUBLIC_API_URL: http://127.0.0.1:3002
+        NEXT_PUBLIC_USE_MOCK: "0"
+    environment:
+      PORT: "10000"
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "3001:10000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:10000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
+    networks:
+      - render-sim
+
+networks:
+  render-sim:
+    driver: bridge

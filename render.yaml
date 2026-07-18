@@ -53,6 +53,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: RENDER
+        value: "true"
       - key: COOKIE_SECURE
         value: "true"
       # Set AFTER frontend URL exists, e.g. https://aura-frontend.onrender.com
