@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Runs from the git repository root (monorepo).
+# Lint-staged cwd is Backend so paths and configs resolve correctly.
+npx --prefix ./Backend lint-staged --cwd ./Backend

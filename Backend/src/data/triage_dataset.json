@@ -1,0 +1,290 @@
+[
+  {
+    "condition_id": "acute_myocardial_infarction",
+    "target_mode": "emergency",
+    "severity_rank": 10,
+    "primary_triggers": ["chest crushing", "elephant on chest", "left arm numb", "jaw pain", "severe chest pressure", "tightness radiating to back"],
+    "secondary_symptoms_to_check": [],
+    "follow_up_logic": "EMERGENCY BYPASS: Do not ask follow-up questions. Immediately return 'action_type': 'emergency_escalation'.",
+    "resolution_action": {
+      "advice_framework": "Advise the user to call emergency services immediately or go to the nearest emergency room. Suspected severe cardiac event.",
+      "exa_search_query": null
+    }
+  },
+  {
+    "condition_id": "stroke_tia",
+    "target_mode": "emergency",
+    "severity_rank": 10,
+    "primary_triggers": ["face drooping", "arm weakness", "slurred speech", "sudden numbness on one side", "can't speak clearly", "sudden loss of balance"],
+    "secondary_symptoms_to_check": [],
+    "follow_up_logic": "EMERGENCY BYPASS: Do not ask follow-up questions. Immediately return 'action_type': 'emergency_escalation'.",
+    "resolution_action": {
+      "advice_framework": "Advise the user to call 911 immediately. Suspected acute cerebrovascular event (Stroke). Time is brain.",
+      "exa_search_query": null
+    }
+  },
+  {
+    "condition_id": "diabetic_ketoacidosis_dka",
+    "target_mode": "emergency",
+    "severity_rank": 9,
+    "primary_triggers": ["fruity breath", "insatiable thirst", "peeing constantly", "blood sugar extremely high", "sweet smelling breath"],
+    "secondary_symptoms_to_check": ["confusion", "vomiting repeatedly", "deep rapid breathing", "extreme fatigue"],
+    "follow_up_logic": "If user reports excessive thirst and frequent urination alongside known diabetes, you MUST ask if they are vomiting or feeling confused to rule out severe Diabetic Ketoacidosis.",
+    "resolution_action": {
+      "advice_framework": "Advise immediate ER evaluation. DKA is a medical emergency. Instruct them to check their blood sugar and ketones if they have a kit at home, and bring their insulin/medications to the hospital.",
+      "exa_search_query": "(site:diabetes.org OR site:cdc.gov) diabetic ketoacidosis DKA warning signs"
+    }
+  },
+  {
+    "condition_id": "acute_appendicitis",
+    "target_mode": "emergency",
+    "severity_rank": 8,
+    "primary_triggers": ["stomach hurts on the right", "pain moved to lower right", "sharp pain in lower abdomen", "hurts to jump or walk"],
+    "secondary_symptoms_to_check": ["fever", "nausea and vomiting", "loss of appetite", "pain gets worse when you press and let go"],
+    "follow_up_logic": "If user mentions lower abdominal pain, you MUST ask if the pain specifically localizes to the lower right side, or if it hurts worse when they jump or walk, to rule out an acute abdomen/appendicitis.",
+    "resolution_action": {
+      "advice_framework": "Advise the user to go to the nearest emergency room immediately for an abdominal ultrasound or CT scan. Instruct them NOT to eat, drink, or take pain medication until evaluated by a doctor.",
+      "exa_search_query": "(site:mayoclinic.org OR site:clevelandclinic.org) acute appendicitis signs and when to go to ER"
+    }
+  },
+  {
+    "condition_id": "hypertensive_crisis",
+    "target_mode": "emergency",
+    "severity_rank": 8,
+    "primary_triggers": ["blood pressure is off the charts", "severe headache with nosebleed", "pounding in my chest and ears", "BP over 180"],
+    "secondary_symptoms_to_check": ["chest pain", "shortness of breath", "numbness or weakness", "blurry vision"],
+    "follow_up_logic": "If user reports an extremely high blood pressure reading or a severe headache with a nosebleed, ask if they have blurry vision, chest pain, or weakness to rule out organ damage.",
+    "resolution_action": {
+      "advice_framework": "Advise the user to sit quietly for 5 minutes and re-check their BP. If it remains above 180/120, or if they have blurry vision/chest pain, advise calling 911 immediately.",
+      "exa_search_query": "(site:heart.org OR site:mayoclinic.org) hypertensive crisis symptoms and emergency"
+    }
+  },
+  {
+    "condition_id": "deep_vein_thrombosis",
+    "target_mode": "emergency",
+    "severity_rank": 8,
+    "primary_triggers": ["calf pain", "leg swelling", "warmth in leg", "red skin on leg", "cramping in one leg"],
+    "secondary_symptoms_to_check": ["sudden shortness of breath", "chest pain when breathing", "coughing up blood"],
+    "follow_up_logic": "If user mentions leg pain/swelling, you MUST ask if they are experiencing any sudden shortness of breath or chest pain to rule out a Pulmonary Embolism.",
+    "resolution_action": {
+      "advice_framework": "Advise them to seek immediate medical evaluation. Strictly instruct them NOT to massage or rub the painful leg, as this could dislodge a clot.",
+      "exa_search_query": "(site:mayoclinic.org OR site:nih.gov) deep vein thrombosis DVT signs and what to avoid"
+    }
+  },
+  {
+    "condition_id": "pneumonia_lower_respiratory",
+    "target_mode": "urgent_care",
+    "severity_rank": 6,
+    "primary_triggers": ["coughing up green mucus", "chest hurts when I breathe in", "wet cough", "rattling in chest", "fever with cough"],
+    "secondary_symptoms_to_check": ["bluish lips", "confusion", "gasping for air", "inability to walk across the room"],
+    "follow_up_logic": "If user reports a wet, productive cough and fever, ask if they experience sharp chest pain when taking a deep breath (pleuritic pain) or if they feel confused, to gauge pneumonia severity. If bluish lips or confusion are present, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "Advise urgent care or prompt clinical evaluation for a chest X-ray and potential antibiotics. Tell them to stay hydrated and rest upright to ease breathing.",
+      "exa_search_query": "(site:lung.org OR site:mayoclinic.org) pneumonia symptoms when to see a doctor"
+    }
+  },
+  {
+    "condition_id": "asthma_exacerbation",
+    "target_mode": "urgent_care",
+    "severity_rank": 6,
+    "primary_triggers": ["wheezing", "tight chest", "coughing a lot at night", "short of breath", "can't catch breath"],
+    "secondary_symptoms_to_check": ["lips or face turning blue", "rescue inhaler not working", "inability to speak in full sentences"],
+    "follow_up_logic": "If user mentions breathing difficulty, you MUST ask if their rescue inhaler is failing, if they cannot speak in full sentences, or if their lips/face are turning blue. If any are confirmed, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "If no emergency signs, advise sitting upright, using a prescribed rescue inhaler, and staying calm. If symptoms do not improve in 15 minutes, seek urgent care.",
+      "exa_search_query": "(site:aafa.org OR site:mayoclinic.org) asthma attack home management when to go to ER"
+    }
+  },
+  {
+    "condition_id": "hypoglycemia_low_blood_sugar",
+    "target_mode": "urgent_care",
+    "severity_rank": 6,
+    "primary_triggers": ["shaky", "sweating suddenly", "dizzy and hungry", "jittery", "feeling faint", "suddenly irritable"],
+    "secondary_symptoms_to_check": ["confusion", "blurry vision", "feeling like passing out", "inability to swallow"],
+    "follow_up_logic": "If user reports shakiness or sudden sweating, ask if they are also experiencing confusion or blurry vision to rule out severe neurological impairment from low glucose. If confusion or inability to swallow is present, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "Advise the 15-15 rule: consume 15 grams of fast-acting carbohydrates (like juice or hard candy), wait 15 minutes, and recheck symptoms.",
+      "exa_search_query": "(site:diabetes.org OR site:mayoclinic.org) 15-15 rule low blood sugar treatment"
+    }
+  },
+  {
+    "condition_id": "concussion_head_injury",
+    "target_mode": "urgent_care",
+    "severity_rank": 6,
+    "primary_triggers": ["hit my head", "fell and bumped head", "dizzy after falling", "seeing stars"],
+    "secondary_symptoms_to_check": ["vomiting multiple times", "unequal pupil size", "loss of consciousness", "clear fluid from nose or ears", "slurred speech"],
+    "follow_up_logic": "If user reports a head injury, you MUST ask the 'red flag' questions: Did they lose consciousness? Have they vomited more than once? Is their speech slurred? If any red flag is present, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "If no red flags, advise resting physically and mentally (no screens, reading, or bright lights). If any red flags develop in the next 24 hours, go to the ER immediately for a CT scan.",
+      "exa_search_query": "(site:cdc.gov/traumaticbraininjury OR site:mayoclinic.org) concussion signs and danger signs"
+    }
+  },
+  {
+    "condition_id": "surgical_site_infection",
+    "target_mode": "urgent_care",
+    "severity_rank": 6,
+    "primary_triggers": ["warm incision", "redness around wound", "leaking fluid", "pus", "swelling at surgery site", "incision hurts more"],
+    "secondary_symptoms_to_check": ["fever above 100.4F (38C)", "chills", "foul smell from wound", "red streaks spreading"],
+    "follow_up_logic": "If user mentions a primary trigger regarding a wound, ask if they are also experiencing a fever, chills, or noticing any foul smell or spreading redness.",
+    "resolution_action": {
+      "advice_framework": "Advise immediate contact with their surgical team or urgent care. Warn against applying home remedies or unprescribed creams. Instruct them to keep the area clean and covered.",
+      "exa_search_query": "(site:mayoclinic.org OR site:facs.org) signs of surgical site infection when to see doctor"
+    }
+  },
+  {
+    "condition_id": "cellulitis_skin_infection",
+    "target_mode": "urgent_care",
+    "severity_rank": 5,
+    "primary_triggers": ["red swollen patch", "skin is hot to touch", "redness is spreading rapidly", "bug bite got huge and hot"],
+    "secondary_symptoms_to_check": ["fever", "chills", "red streaks spreading toward the heart", "pus or drainage"],
+    "follow_up_logic": "If user mentions a swollen, red patch of skin, ask if the area is hot to the touch, rapidly expanding, or if they have developed a fever.",
+    "resolution_action": {
+      "advice_framework": "Advise a prompt urgent care visit. Instruct the user to take a pen and draw a circle around the border of the redness right now to track if it continues spreading before they see the doctor.",
+      "exa_search_query": "(site:aad.org OR site:mayoclinic.org) cellulitis signs spreading skin infection"
+    }
+  },
+  {
+    "condition_id": "urinary_tract_infection",
+    "target_mode": "urgent_care",
+    "severity_rank": 4,
+    "primary_triggers": ["pain when peeing", "burning during urination", "urge to pee constantly", "cloudy urine", "foul smelling urine"],
+    "secondary_symptoms_to_check": ["lower back pain", "flank pain", "high fever", "nausea", "vomiting"],
+    "follow_up_logic": "If user reports painful urination, you MUST ask if they have mid-back/flank pain, high fever, or vomiting to rule out a severe kidney infection (Pyelonephritis).",
+    "resolution_action": {
+      "advice_framework": "Advise increasing water intake to flush bacteria. Recommend seeking a clinical evaluation for urinalysis and potential antibiotics, as home remedies cannot cure a bacterial infection.",
+      "exa_search_query": "(site:urologyhealth.org OR site:mayoclinic.org) UTI vs kidney infection symptoms"
+    }
+  },
+  {
+    "condition_id": "migraine_exacerbation",
+    "target_mode": "urgent_care",
+    "severity_rank": 4,
+    "primary_triggers": ["throbbing headache", "light sensitivity", "nausea with headache", "visual aura", "blind spots", "pounding head"],
+    "secondary_symptoms_to_check": ["worst headache of your life", "stiff neck", "fever", "slurred speech", "confusion"],
+    "follow_up_logic": "If user mentions severe headache, you MUST ask if this is the 'worst headache of their life', or if they have a stiff neck, fever, or slurred speech to rule out stroke or meningitis. If any are confirmed, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "If no stroke/meningitis signs, advise resting in a dark, quiet room, staying hydrated, and taking prescribed abortive medications early. Avoid screen time.",
+      "exa_search_query": "(site:americanmigrainefoundation.org OR site:mayoclinic.org) migraine relief at home"
+    }
+  },
+  {
+    "condition_id": "panic_attack_acute_anxiety",
+    "target_mode": "preventive",
+    "severity_rank": 3,
+    "primary_triggers": ["heart is racing", "hyperventilating", "freaking out", "sudden intense fear", "feel like I'm going to die but no chest pressure"],
+    "secondary_symptoms_to_check": ["crushing chest pressure", "pain radiating to left arm or jaw", "fainting"],
+    "follow_up_logic": "If user reports a racing heart or hyperventilation, you MUST strictly differentiate this from a heart attack. Ask if there is crushing chest pressure or pain radiating to the arm/jaw. If yes, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "If cardiac signs are ruled out, validate their experience. Guide them through a 4-7-8 grounding breathing exercise. Reassure them that panic attacks peak within 10 minutes and they are safe.",
+      "exa_search_query": "(site:adaa.org OR site:mayoclinic.org) panic attack grounding techniques and breathing"
+    }
+  },
+  {
+    "condition_id": "allergic_rhinitis_vs_anaphylaxis",
+    "target_mode": "preventive",
+    "severity_rank": 3,
+    "primary_triggers": ["itchy eyes", "sneezing", "watery eyes", "runny nose", "scratchy throat", "pollen acting up"],
+    "secondary_symptoms_to_check": ["lip swelling", "tongue swelling", "throat closing", "severe difficulty breathing", "hives spreading rapidly"],
+    "follow_up_logic": "If user mentions allergies, verify they are not experiencing lip/tongue swelling or throat tightness to strictly rule out anaphylaxis. If any are confirmed, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "If no anaphylactic signs, advise using over-the-counter antihistamines, keeping windows closed, and using a saline nasal rinse.",
+      "exa_search_query": "(site:aafa.org OR site:mayoclinic.org) seasonal allergy relief and avoidance"
+    }
+  },
+  {
+    "condition_id": "dehydration_heat_exhaustion",
+    "target_mode": "preventive",
+    "severity_rank": 3,
+    "primary_triggers": ["dizzy", "dark urine", "dry mouth", "extreme thirst", "lightheaded when standing", "cramps"],
+    "secondary_symptoms_to_check": ["confusion", "fainting", "inability to keep fluids down", "rapid heart rate", "no sweating"],
+    "follow_up_logic": "If user mentions signs of dehydration, ask if they have fainted, feel confused, or have a racing heart to rule out severe heat stroke. If any are confirmed, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "Advise immediate electrolyte and fluid replacement. Instruct them to sit or lie down in a cool environment. If dizziness persists after drinking, seek medical help.",
+      "exa_search_query": "(site:mayoclinic.org OR site:cdc.gov) dehydration heat exhaustion treatment guidelines"
+    }
+  },
+  {
+    "condition_id": "benign_positional_vertigo",
+    "target_mode": "preventive",
+    "severity_rank": 2,
+    "primary_triggers": ["room is spinning", "dizzy when I roll over in bed", "vertigo", "feel unbalanced when I look up"],
+    "secondary_symptoms_to_check": ["slurred speech", "facial drooping", "inability to walk", "double vision", "numbness"],
+    "follow_up_logic": "If user complains of the room spinning (vertigo), you MUST ask if they have any slurred speech, double vision, or facial drooping to strictly rule out a stroke. If any are confirmed, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "If stroke is ruled out, explain this is likely BPPV (inner ear crystal dislodgement). Advise them to move their head slowly, stay hydrated, and look up the Epley maneuver for home relief.",
+      "exa_search_query": "(site:hopkinsmedicine.org OR site:mayoclinic.org) BPPV vertigo home treatment Epley maneuver"
+    }
+  },
+  {
+    "condition_id": "acid_reflux_gerd",
+    "target_mode": "preventive",
+    "severity_rank": 2,
+    "primary_triggers": ["heartburn", "sour taste", "burning in chest after eating", "burping a lot", "stomach acid"],
+    "secondary_symptoms_to_check": ["chest pain radiating to arm or jaw", "difficulty swallowing", "vomiting blood", "black tarry stools"],
+    "follow_up_logic": "If user mentions heartburn, you MUST ask if the pain radiates to their arm/jaw, or if they have black stools/vomiting blood to rule out a heart attack or GI bleed. If any are confirmed, escalate to emergency.",
+    "resolution_action": {
+      "advice_framework": "Advise avoiding lying down for 2-3 hours after meals. Suggest avoiding trigger foods (spicy, citrus, caffeine) and considering an OTC antacid. Elevate the head of the bed.",
+      "exa_search_query": "(site:niddk.nih.gov OR site:mayoclinic.org) GERD acid reflux lifestyle changes"
+    }
+  },
+  {
+    "condition_id": "viral_upper_respiratory",
+    "target_mode": "preventive",
+    "severity_rank": 2,
+    "primary_triggers": ["cough", "sore throat", "runny nose", "congestion", "sneezing", "scratchy throat"],
+    "secondary_symptoms_to_check": ["high fever above 102F (39C)", "difficulty breathing", "wheezing", "severe chest pain"],
+    "follow_up_logic": "If user mentions cold symptoms, ask if they have a high fever or any difficulty breathing to rule out pneumonia or severe influenza.",
+    "resolution_action": {
+      "advice_framework": "If no severe secondary symptoms, validate a likely viral infection. Advise aggressive hydration, rest, and OTC symptom management. If symptoms worsen after 5 days, consult a doctor.",
+      "exa_search_query": "(site:cdc.gov OR site:mayoclinic.org) viral upper respiratory infection home care relief"
+    }
+  },
+  {
+    "condition_id": "gastroenteritis",
+    "target_mode": "preventive",
+    "severity_rank": 2,
+    "primary_triggers": ["nausea", "stomach cramps", "diarrhea", "vomiting", "upset stomach"],
+    "secondary_symptoms_to_check": ["blood in stool", "inability to keep water down for 24 hours", "high fever", "severe localized abdominal pain"],
+    "follow_up_logic": "If user mentions stomach issues, ask if they are unable to keep liquids down, have a high fever, or notice severe localized pain (to rule out appendicitis).",
+    "resolution_action": {
+      "advice_framework": "Advise the BRAT diet (Bananas, Rice, Applesauce, Toast) and frequent small sips of water or oral rehydration solutions. Avoid dairy and caffeine.",
+      "exa_search_query": "(site:mayoclinic.org OR site:cdc.gov) viral gastroenteritis stomach bug home remedies"
+    }
+  },
+  {
+    "condition_id": "musculoskeletal_strain",
+    "target_mode": "preventive",
+    "severity_rank": 1,
+    "primary_triggers": ["sore muscles", "pulled a muscle", "hurts to move", "workout soreness", "stiff back", "tweaked my shoulder"],
+    "secondary_symptoms_to_check": ["sharp shooting pain", "inability to bear weight", "visible deformity", "numbness or tingling down the limb"],
+    "follow_up_logic": "If user mentions muscle soreness, ask if there is a visible deformity, sharp shooting pain, or numbness to rule out a structural tear or nerve compression.",
+    "resolution_action": {
+      "advice_framework": "Advise the R.I.C.E protocol (Rest, Ice, Compression, Elevation) for the first 48 hours, followed by gentle stretching and OTC anti-inflammatories if safe for the user.",
+      "exa_search_query": "(site:orthoinfo.aaos.org OR site:mayoclinic.org) muscle strain RICE protocol treatment"
+    }
+  },
+  {
+    "condition_id": "insomnia_sleep_apnea_check",
+    "target_mode": "preventive",
+    "severity_rank": 1,
+    "primary_triggers": ["can't fall asleep", "waking up a lot", "tired during the day", "racing thoughts at night", "insomnia"],
+    "secondary_symptoms_to_check": ["waking up gasping for air", "partner complaining of severe snoring", "morning headaches", "falling asleep while driving"],
+    "follow_up_logic": "If user complains of poor sleep, ask if they ever wake up gasping for air or have severe morning headaches to screen for Obstructive Sleep Apnea.",
+    "resolution_action": {
+      "advice_framework": "If no sleep apnea signs, advise strict sleep hygiene: screen-time cutoff 60 minutes before bed, cooling the room to 65F, and maintaining a consistent wake time.",
+      "exa_search_query": "(site:sleepfoundation.org OR site:mayoclinic.org) sleep hygiene practices for insomnia"
+    }
+  },
+  {
+    "condition_id": "chronic_burnout_stress",
+    "target_mode": "preventive",
+    "severity_rank": 1,
+    "primary_triggers": ["exhausted", "stressed", "overwhelmed", "can't focus", "brain fog", "constantly tired", "anxious"],
+    "secondary_symptoms_to_check": ["trouble sleeping", "tension headaches", "changes in appetite", "heart palpitations"],
+    "follow_up_logic": "If user mentions emotional exhaustion, ask if the stress is causing physical symptoms like insomnia, tension headaches, or a racing heart.",
+    "resolution_action": {
+      "advice_framework": "Validate their stress. Suggest a 2-minute physiological sigh (breathing reset) and establishing a strict screen-time cutoff for tonight to regulate cortisol.",
+      "exa_search_query": "(site:clevelandclinic.org OR site:nih.gov) cortisol reduction burnout recovery techniques"
+    }
+  }
+]

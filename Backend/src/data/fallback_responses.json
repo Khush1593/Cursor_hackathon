@@ -1,0 +1,20 @@
+{
+  "safe_mode_fallback": {
+    "action_type": "general_response",
+    "detected_mode": "preventive",
+    "ai_spoken_response": "I'm experiencing a brief connection drop, but your vitals have been logged safely. Please try speaking your update again.",
+    "audio_base64": null,
+    "is_emergency_state": false,
+    "updated_metrics": {},
+    "exa_insight": null
+  },
+  "emergency_fallback": {
+    "action_type": "emergency_escalation",
+    "detected_mode": "emergency",
+    "ai_spoken_response": "I am having trouble processing that, but based on your keywords, I am immediately activating emergency protocols to keep you safe.",
+    "audio_base64": null,
+    "is_emergency_state": true,
+    "updated_metrics": {},
+    "exa_insight": null
+  }
+}
