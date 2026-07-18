@@ -9,8 +9,8 @@ import { useAuraStore } from "@/store/aura.store";
 
 /**
  * Full-screen emergency lock when `isEmergency` is true.
- * Shows Aura's AI message, a clinical handoff TEXT card (no QR),
- * and a "would notify relatives" preview (demo — does not send SMS).
+ * Shows Aura's AI message, 911 / emergency contact, location + nearest ER,
+ * a clinical handoff TEXT card (no QR), and a relative-notify preview (demo).
  */
 export function EmergencyLock() {
   const isEmergency = useAuraStore((s) => s.isEmergency);
@@ -18,8 +18,13 @@ export function EmergencyLock() {
   const messages = useAuraStore((s) => s.messages);
   const metrics = useAuraStore((s) => s.metrics);
   const reasoningTrace = useAuraStore((s) => s.lastReasoningTrace);
+  const nearestEr = useAuraStore((s) => s.nearestEr);
+  const askShareLocation = useAuraStore((s) => s.askShareLocation);
   const resetEmergency = useAuraStore((s) => s.resetEmergency);
+  const shareLocation = useAuraStore((s) => s.shareLocation);
+  const apiError = useAuraStore((s) => s.apiError);
   const [dismissing, setDismissing] = useState(false);
+  const [locBusy, setLocBusy] = useState(false);
   const [showHandoff, setShowHandoff] = useState(true);
 
   const lastUser = useMemo(
@@ -69,6 +74,12 @@ export function EmergencyLock() {
     setDismissing(false);
   };
 
+  const onShareLocation = async () => {
+    setLocBusy(true);
+    await shareLocation();
+    setLocBusy(false);
+  };
+
   return (
     <div
       role="alertdialog"
@@ -108,9 +119,8 @@ export function EmergencyLock() {
 
         <h1 className="mt-5 text-3xl font-bold tracking-tight">Possible emergency</h1>
 
-        {/* Prominent Aura AI message */}
         <p className="mx-auto mt-4 max-w-md rounded-2xl bg-black/25 px-4 py-3 text-left text-base leading-relaxed text-white shadow-inner ring-1 ring-white/20">
-          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-white/70">
+          <span className="mb-1 block text-[11px] font-semibold tracking-wider text-white/70 uppercase">
             Aura says
           </span>
           {aiMessage}
@@ -130,7 +140,7 @@ export function EmergencyLock() {
             className="flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-lg font-bold text-red-700 shadow-lg transition-transform hover:scale-[1.02] active:scale-95"
           >
             <PhoneIcon />
-            Call 911
+            Call emergency services
           </a>
 
           {contactPhone && (
@@ -143,9 +153,35 @@ export function EmergencyLock() {
               <span className="text-white/70">· {contactPhone}</span>
             </a>
           )}
+
+          {(askShareLocation || !nearestEr) && (
+            <button
+              type="button"
+              onClick={() => void onShareLocation()}
+              disabled={locBusy}
+              className="flex items-center justify-center gap-2 rounded-2xl border border-white/40 bg-white/10 px-6 py-3.5 text-base font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/20 disabled:opacity-50"
+            >
+              <PinIcon />
+              {locBusy ? "Finding nearest ER…" : "Share location for nearest ER"}
+            </button>
+          )}
         </div>
 
-        {/* Clinical handoff TEXT card (no QR) */}
+        {nearestEr && (
+          <div className="mt-5 rounded-2xl border border-white/30 bg-white/10 p-4 text-left backdrop-blur-sm">
+            <p className="text-xs font-semibold tracking-widest text-white/70 uppercase">
+              Nearest ER
+            </p>
+            <p className="mt-1 text-lg font-semibold">{nearestEr.name}</p>
+            <p className="text-sm text-white/80">{nearestEr.address}</p>
+            <p className="mt-1 text-sm font-medium text-white">
+              ~{nearestEr.distance_miles.toFixed(1)} miles away
+            </p>
+          </div>
+        )}
+
+        {apiError && <p className="mt-3 text-xs text-white/75">{apiError}</p>}
+
         <div className="mt-6 text-left">
           <button
             type="button"
@@ -162,9 +198,8 @@ export function EmergencyLock() {
           )}
         </div>
 
-        {/* Relatives notify preview — demo only, does not send */}
         <div className="mt-4 rounded-xl border border-amber-200/40 bg-amber-950/30 px-4 py-3 text-left">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-100/80">
+          <p className="text-[11px] font-semibold tracking-wider text-amber-100/80 uppercase">
             Relative alert (demo preview — not sent)
           </p>
           <p className="mt-1.5 text-sm leading-relaxed text-amber-50/95">
@@ -172,8 +207,8 @@ export function EmergencyLock() {
           </p>
           {!contactPhone && (
             <p className="mt-2 text-xs text-amber-100/70">
-              Add an emergency contact in your profile so Aura can preview who would
-              be notified.
+              Add an emergency contact in your profile so Aura can preview who would be
+              notified.
             </p>
           )}
         </div>
@@ -209,6 +244,23 @@ function PhoneIcon() {
       strokeLinejoin="round"
     >
       <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8 9.5a16 16 0 0 0 6 6l1.1-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z" />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z" />
+      <circle cx="12" cy="10" r="2.5" />
     </svg>
   );
 }
