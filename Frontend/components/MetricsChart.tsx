@@ -152,9 +152,8 @@ export function MetricsChart() {
           </span>
           <p className="mt-3 text-sm font-medium text-aura-ink">Your trend starts here</p>
           <p className="mt-1 max-w-xs text-xs leading-relaxed text-aura-muted">
-            Mention pain (e.g. &quot;pain is a 6&quot;) or sleep (e.g. &quot;I slept 5
-            hours&quot;) during a check-in. Aura builds this view without inventing
-            missing data.
+            Mention pain, sleep, or energy during a check-in. Aura will build this view
+            without inventing missing data.
           </p>
           <div className="mt-4 flex w-full max-w-xs items-end gap-2 opacity-45">
             {[34, 52, 43, 64, 48, 72, 60].map((height, index) => (

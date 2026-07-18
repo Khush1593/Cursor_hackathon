@@ -591,11 +591,8 @@ export const useAuraStore = create<AuraState>((set, get) => {
 
       set((s) => {
         let metrics = s.metrics;
-        const um = res.updated_metrics;
-        const hasMetric =
-          um != null && (um.pain_level != null || um.sleep_hours != null);
-        if (hasMetric && um) {
-          const { pain_level, sleep_hours } = um;
+        if (res.updated_metrics) {
+          const { pain_level, sleep_hours } = res.updated_metrics;
           const idx = metrics.findIndex((p) => p.date === today);
           const base: Point =
             idx >= 0
