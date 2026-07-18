@@ -23,6 +23,9 @@ function label(iso: string): string {
 export function MetricsChart() {
   const metrics = useAuraStore((s) => s.metrics);
   const data = metrics.map((p: Point) => ({ ...p, label: label(p.date) }));
+  const hasPlottable = metrics.some(
+    (p) => p.pain_level != null || p.sleep_hours != null,
+  );
 
   return (
     <section className="aura-panel aura-transition flex flex-col rounded-3xl p-5 shadow-sm">
@@ -37,58 +40,70 @@ export function MetricsChart() {
       </header>
 
       <div className="h-56 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-            <CartesianGrid
-              strokeDasharray="3 6"
-              stroke="var(--aura-panel-border)"
-              vertical={false}
-            />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: "var(--aura-muted)", fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis
-              domain={[0, 10]}
-              tick={{ fill: "var(--aura-muted)", fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
-              width={36}
-            />
-            <Tooltip
-              contentStyle={{
-                borderRadius: 14,
-                border: "1px solid var(--aura-panel-border)",
-                background: "rgba(255,255,255,0.92)",
-                boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                fontSize: 12,
-              }}
-              labelStyle={{ color: "#0f2a4a", fontWeight: 600 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="pain_level"
-              name="Pain"
-              stroke={PAIN}
-              strokeWidth={2.5}
-              dot={{ r: 3, strokeWidth: 0, fill: PAIN }}
-              activeDot={{ r: 5 }}
-              connectNulls={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="sleep_hours"
-              name="Sleep (h)"
-              stroke={SLEEP}
-              strokeWidth={2.5}
-              dot={{ r: 3, strokeWidth: 0, fill: SLEEP }}
-              activeDot={{ r: 5 }}
-              connectNulls={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        {!hasPlottable ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+            <p className="text-sm font-medium text-aura-ink">
+              No vitals logged yet
+            </p>
+            <p className="max-w-sm text-xs leading-relaxed text-aura-muted">
+              Mention pain (e.g. &quot;pain is a 6&quot;) or sleep (e.g. &quot;I
+              slept 5 hours&quot;) during triage — those points appear here.
+            </p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+              <CartesianGrid
+                strokeDasharray="3 6"
+                stroke="var(--aura-panel-border)"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: "var(--aura-muted)", fontSize: 12 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                domain={[0, 24]}
+                tick={{ fill: "var(--aura-muted)", fontSize: 12 }}
+                axisLine={false}
+                tickLine={false}
+                width={36}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 14,
+                  border: "1px solid var(--aura-panel-border)",
+                  background: "rgba(255,255,255,0.92)",
+                  boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: "#0f2a4a", fontWeight: 600 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="pain_level"
+                name="Pain"
+                stroke={PAIN}
+                strokeWidth={2.5}
+                dot={{ r: 3, strokeWidth: 0, fill: PAIN }}
+                activeDot={{ r: 5 }}
+                connectNulls={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="sleep_hours"
+                name="Sleep (h)"
+                stroke={SLEEP}
+                strokeWidth={2.5}
+                dot={{ r: 3, strokeWidth: 0, fill: SLEEP }}
+                activeDot={{ r: 5 }}
+                connectNulls={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </section>
   );
