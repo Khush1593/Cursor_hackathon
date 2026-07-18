@@ -1,7 +1,7 @@
 # Aura V5 — Master System Prompt & Fail-Safe Cache
 
 > **Status:** V5 (current). Supersedes the earlier V4 draft.
-> Authoritative contracts live in [contracts_v5.md](contracts_v5.md). This file holds the two
+> Authoritative contracts live in [contracts.MD](contracts.MD). This file holds the two
 > runtime artifacts: the FastAPI system prompt and the NestJS offline fallback cache.
 
 The Database schema, the flat `triage_dataset.json` (24 conditions), and the routing logic are
@@ -83,7 +83,7 @@ For extracted_dashboard_metrics: extract mentioned vitals using the EXACT keys "
 
 > **Reliability:** bind this to the LLM's structured-outputs / JSON mode so malformed JSON is
 > physically impossible. If you collapse Python into a NestJS provider, Zod becomes the single
-> validator (see [contracts_v5.md](contracts_v5.md)).
+> validator (see [contracts.MD](contracts.MD)).
 
 ---
 
@@ -131,4 +131,7 @@ Otherwise return safe_mode_fallback.
 The bare word `"pain"` is intentionally NOT a trigger — it appears in most benign utterances
 ("no pain today") and would false-fire the red emergency lock. `audio_base64` is `null` in both:
 on a hard failure we sacrifice the voice and degrade to instant on-screen text.
+
+```
+
 ```

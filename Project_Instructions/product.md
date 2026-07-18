@@ -7,7 +7,7 @@ You can copy and paste this directly to your team as the single source of truth 
 > `clinical_alert` value is **gone**. The dataset is [triage_dataset.json](triage_dataset.json) —
 > a single flat array of 24 conditions, each with a `severity_rank` (1–10). The multi-turn loop is
 > carried by `pending_triage_update`. Detailed API/prompt/Zod contracts live in
-> **[contracts_v5.md](contracts_v5.md)** (authoritative); the runtime prompt + fallback live in
+> **[contracts.MD](contracts.MD)** (authoritative); the runtime prompt + fallback live in
 > **[prompt_instruction.md](prompt_instruction.md)** and **[fallback_responses.json](fallback_responses.json)**.
 > The V4 "Recovery Check-in" flow has been **removed** (see §4).
 
@@ -23,22 +23,22 @@ You can copy and paste this directly to your team as the single source of truth 
 
 ### Pillar 1: Adaptive Frontend (Next.js + Zustand)
 
-* **Role:** The patient-facing UI. Purely state-driven via a Zustand global store.
-* **Voice Integration:** Browser-native **Web Speech API** (`window.SpeechRecognition`) captures and transcribes spoken entries via a **Push-to-Talk** button (no silence detection — the transcript is sent only on button release). Requires HTTPS in production (Vercel).
-* **Theming:** Automatically snaps between three tiers based on `detected_mode`: `preventive` (calm blue/green), `urgent_care` (amber — needs a doctor, non-locking), and `emergency` (high-contrast red, locks the screen).
-* **Safety UI:** Displays a persistent medical disclaimer. Houses the "Emergency Dismiss" reset button if the crisis flow is triggered.
+- **Role:** The patient-facing UI. Purely state-driven via a Zustand global store.
+- **Voice Integration:** Browser-native **Web Speech API** (`window.SpeechRecognition`) captures and transcribes spoken entries via a **Push-to-Talk** button (no silence detection — the transcript is sent only on button release). Requires HTTPS in production (Vercel).
+- **Theming:** Automatically snaps between three tiers based on `detected_mode`: `preventive` (calm blue/green), `urgent_care` (amber — needs a doctor, non-locking), and `emergency` (high-contrast red, locks the screen).
+- **Safety UI:** Displays a persistent medical disclaimer. Houses the "Emergency Dismiss" reset button if the crisis flow is triggered.
 
 ### Pillar 2: Core Gateway & Data Controller (NestJS)
 
-* **Role:** The traffic controller, database owner, and fail-safe layer.
-* **Audio Orchestration:** Calls **ElevenLabs** for text-to-speech so API keys never touch the browser.
-* **Validation:** Uses Zod to strictly validate the LLM's JSON response before passing it to the frontend.
+- **Role:** The traffic controller, database owner, and fail-safe layer.
+- **Audio Orchestration:** Calls **ElevenLabs** for text-to-speech so API keys never touch the browser.
+- **Validation:** Uses Zod to strictly validate the LLM's JSON response before passing it to the frontend.
 
 ### Pillar 3: Active Triage Engine (Python FastAPI)
 
-* **Role:** The stateless clinical reasoning engine.
-* **Logic:** Uses semantic matching (not regex) against the `triage_dataset.json` reference graph.
-* **Context:** Entirely stateless. It relies on NestJS to pass the user's baseline and historical logs on every single request.
+- **Role:** The stateless clinical reasoning engine.
+- **Logic:** Uses semantic matching (not regex) against the `triage_dataset.json` reference graph.
+- **Context:** Entirely stateless. It relies on NestJS to pass the user's baseline and historical logs on every single request.
 
 ---
 
@@ -83,7 +83,7 @@ model HealthLog {
   userId            String
   user              User        @relation(fields: [userId], references: [id])
   createdAt         DateTime    @default(now())
-  
+
   rawAudioText        String    // Raw Web Speech API transcript
   detectedMode        String    // Per-log tier: "preventive" | "urgent_care" | "emergency"
   detectedConditionId String?   // Set on resolve/emergency; powers the 7-day trend SQL. null on follow-ups.
@@ -98,11 +98,11 @@ model ExaInsight {
   userId            String
   user              User        @relation(fields: [userId], references: [id])
   createdAt         DateTime    @default(now())
-  
-  triggerSymptom    String      
-  articleTitle      String      
-  articleUrl        String      
-  aiSummary         String      
+
+  triggerSymptom    String
+  articleTitle      String
+  articleUrl        String
+  aiSummary         String
 }
 
 ```
@@ -150,7 +150,7 @@ class TriageRequest(BaseModel):
 NestJS will validate Python's response against this schema. If Python hallucinates a bad JSON structure, the `catch` block intercepts it and serves the `fallback_responses.json` cache.
 
 ```typescript
-import { z } from 'zod';
+import { z } from "zod";
 
 const PendingTriageSchema = z.object({
   condition_id: z.string(),
@@ -159,19 +159,18 @@ const PendingTriageSchema = z.object({
 
 const AuraResponseSchema = z.object({
   action_type: z.enum([
-    'ask_follow_up',        // Mid-triage multi-turn question
-    'resolve',              // End of triage, triggers Exa search + writes detectedConditionId
-    'emergency_escalation', // Bypass or confirmed deadly secondary symptom
-    'general_response'      // Unrelated chatter ("feeling fine today") — NOT logged
+    "ask_follow_up", // Mid-triage multi-turn question
+    "resolve", // End of triage, triggers Exa search + writes detectedConditionId
+    "emergency_escalation", // Bypass or confirmed deadly secondary symptom
+    "general_response" // Unrelated chatter ("feeling fine today") — NOT logged
   ]),
-  detected_mode: z.enum(['preventive', 'urgent_care', 'emergency']),
+  detected_mode: z.enum(["preventive", "urgent_care", "emergency"]),
   detected_condition_id: z.string().nullable(),
   extracted_dashboard_metrics: z.record(z.any()),
   ai_spoken_response: z.string(),
   trigger_exa_search: z.string().nullable(),
   pending_triage_update: PendingTriageSchema.nullable()
 });
-
 ```
 
 ### C. The REST Layer (Next.js ↔ NestJS)
@@ -192,10 +191,10 @@ with Zod, writes a `HealthLog` (see rules below), then returns this exact shape 
   "action_type": "ask_follow_up",
   "detected_mode": "urgent_care",
   "ai_spoken_response": "Are you experiencing any crushing chest pressure?",
-  "audio_base64": "UklGRiQAAABXQVZF...",   // ElevenLabs MP3 as base64; null on fallback
+  "audio_base64": "UklGRiQAAABXQVZF...", // ElevenLabs MP3 as base64; null on fallback
   "is_emergency_state": false,
   "updated_metrics": { "pain_level": 4, "sleep_hours": null },
-  "exa_insight": null                       // { "title", "url", "summary" }, populated ONLY on "resolve"
+  "exa_insight": null // { "title", "url", "summary" }, populated ONLY on "resolve"
 }
 ```
 
@@ -211,7 +210,7 @@ with Zod, writes a `HealthLog` (see rules below), then returns this exact shape 
 `activeMode="preventive"` (fired by the "Crisis Handled / Dismiss" button on the red screen).
 
 > Only `emergency` persists/locks. `urgent_care` and `preventive` color only that one response.
-> Full field-by-field definitions live in [contracts_v5.md](contracts_v5.md).
+> Full field-by-field definitions live in [contracts.MD](contracts.MD).
 
 ---
 
@@ -227,9 +226,9 @@ If a symptom matches multiple conditions, the LLM sorts by `severity_rank` (desc
 
 ### 3. The Three Tiers & Emergency Reset
 
-* **`preventive` (blue) / `urgent_care` (amber):** transient — they color only the current response. They do NOT lock or persist. A mild UTI or migraine shows amber but the app stays interactive.
-* **`emergency` (red):** the only tier that persists and locks. If the AI returns `emergency_escalation`, NestJS sets `User.isEmergencyState = true` and `activeMode = "emergency"`. Next.js locks the screen, turns it red, and displays 911 + `emergencyContactName`/`emergencyContactPhone`.
-* **Reset:** The **"Crisis Handled / Dismiss"** button on the red UI hits `PATCH /api/users/reset-emergency`, flipping `isEmergencyState=false` and `activeMode="preventive"`.
+- **`preventive` (blue) / `urgent_care` (amber):** transient — they color only the current response. They do NOT lock or persist. A mild UTI or migraine shows amber but the app stays interactive.
+- **`emergency` (red):** the only tier that persists and locks. If the AI returns `emergency_escalation`, NestJS sets `User.isEmergencyState = true` and `activeMode = "emergency"`. Next.js locks the screen, turns it red, and displays 911 + `emergencyContactName`/`emergencyContactPhone`.
+- **Reset:** The **"Crisis Handled / Dismiss"** button on the red UI hits `PATCH /api/users/reset-emergency`, flipping `isEmergencyState=false` and `activeMode="preventive"`.
 
 > **Removed in V5:** the old "Recovery Check-in" flow. It existed to exit a persistent `clinical_alert` lock, which no longer exists — `urgent_care` never locks, and `emergency` is cleared by the Dismiss button above. **Do not build it.**
 
@@ -237,11 +236,11 @@ If a symptom matches multiple conditions, the LLM sorts by `severity_rank` (desc
 
 ## 5. Live Demo Fail-Safes
 
-* **Exa Multi-Domain Mesh:** Exa queries must use logical OR operators to avoid zero-result errors: `(site:mayoclinic.org OR site:cdc.gov OR site:nih.gov) [Symptom query]`.
-* **The "Safe Mode" Cache:** A hardcoded [fallback_responses.json](fallback_responses.json) sits in the NestJS server, matching the `/api/triage/turn` response shape 1:1. On a hard failure the `catch` block returns it directly. `audio_base64` is `null` (we sacrifice voice and degrade to instant on-screen text — no need to pre-generate MP3s). Keyword selection between the safe vs. emergency object uses hard combinations only (see [prompt_instruction.md](prompt_instruction.md)); the bare word "pain" is NOT a trigger.
-* **CORS Pre-Flight:** Configure CORS in NestJS `main.ts` in Hour 1 to accept the Next.js origin (localhost:3001 in dev, the Vercel URL in prod).
-* **Audio Autoplay Unlock:** Instantiate a global `Audio` object and play/pause a 1-frame silent clip on the Push-to-Talk `mousedown` (a valid user gesture) so the later base64 response can `.play()` without Chrome blocking it. Wrap the response `.play()` in `.catch()` to degrade to text.
-* **HTTPS everywhere:** Web Speech API needs HTTPS. Deploy Next.js to Vercel and the NestJS/Postgres backend to Railway/Render (both auto-provision SSL) — an HTTPS frontend cannot call an HTTP backend (mixed-content block).
+- **Exa Multi-Domain Mesh:** Exa queries must use logical OR operators to avoid zero-result errors: `(site:mayoclinic.org OR site:cdc.gov OR site:nih.gov) [Symptom query]`.
+- **The "Safe Mode" Cache:** A hardcoded [fallback_responses.json](fallback_responses.json) sits in the NestJS server, matching the `/api/triage/turn` response shape 1:1. On a hard failure the `catch` block returns it directly. `audio_base64` is `null` (we sacrifice voice and degrade to instant on-screen text — no need to pre-generate MP3s). Keyword selection between the safe vs. emergency object uses hard combinations only (see [prompt_instruction.md](prompt_instruction.md)); the bare word "pain" is NOT a trigger.
+- **CORS Pre-Flight:** Configure CORS in NestJS `main.ts` in Hour 1 to accept the Next.js origin (localhost:3001 in dev, the Vercel URL in prod).
+- **Audio Autoplay Unlock:** Instantiate a global `Audio` object and play/pause a 1-frame silent clip on the Push-to-Talk `mousedown` (a valid user gesture) so the later base64 response can `.play()` without Chrome blocking it. Wrap the response `.play()` in `.catch()` to degrade to text.
+- **HTTPS everywhere:** Web Speech API needs HTTPS. Deploy Next.js to Vercel and the NestJS/Postgres backend to Railway/Render (both auto-provision SSL) — an HTTPS frontend cannot call an HTTP backend (mixed-content block).
 
 ---
 
@@ -250,7 +249,7 @@ If a symptom matches multiple conditions, the LLM sorts by `severity_rank` (desc
 To eliminate manual terminal setups and keep environments identical across the team, place this `docker-compose.yml` in the root directory. Run `docker compose up -d` to instantly containerize and spin up the database, backend, and API gateways.
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   postgres:
@@ -296,7 +295,6 @@ services:
 
 volumes:
   postgres_data:
-
 ```
 
 ---
@@ -304,22 +302,23 @@ volumes:
 ## 7. The 24-Hour Execution Timeline
 
 1. **Hours 1-4: The Foundation:** Independent scaffolding & environment setup.
-* **Senior Dev:** Run Docker Compose. Push the Prisma schema. Scaffold NestJS endpoints and Zod validation.
-* **Data Scientist:** Wire the locked [triage_dataset.json](triage_dataset.json) into the FastAPI system prompt. Build the endpoint with the exact Pydantic `TriageRequest` model + structured JSON output.
-* **Mid-Level Dev:** Scaffold Next.js and the Zustand store. Build the `DashboardLayout` wrapper that toggles the 3-tier Tailwind themes (blue `preventive` / amber `urgent_care` / red `emergency`) off `detected_mode`.
 
+- **Senior Dev:** Run Docker Compose. Push the Prisma schema. Scaffold NestJS endpoints and Zod validation.
+- **Data Scientist:** Wire the locked [triage_dataset.json](triage_dataset.json) into the FastAPI system prompt. Build the endpoint with the exact Pydantic `TriageRequest` model + structured JSON output.
+- **Mid-Level Dev:** Scaffold Next.js and the Zustand store. Build the `DashboardLayout` wrapper that toggles the 3-tier Tailwind themes (blue `preventive` / amber `urgent_care` / red `emergency`) off `detected_mode`.
 
 2. **Hours 5-10: The Brain Connection:** Wiring logic and establishing state memory.
-* **Data Scientist & Senior Dev:** Connect NestJS to Python. Ensure NestJS passes the 7-day Postgres history array and baseline context on every request.
-* **Mid-Level Dev:** Wire the Web Speech API to a **Push-to-Talk** button (send transcript on release), unlock the global `Audio` object on `mousedown`. Ensure the frontend posts to `/api/triage/turn` and parses the 4 `action_types` correctly.
 
+- **Data Scientist & Senior Dev:** Connect NestJS to Python. Ensure NestJS passes the 7-day Postgres history array and baseline context on every request.
+- **Mid-Level Dev:** Wire the Web Speech API to a **Push-to-Talk** button (send transcript on release), unlock the global `Audio` object on `mousedown`. Ensure the frontend posts to `/api/triage/turn` and parses the 4 `action_types` correctly.
 
 3. **Hours 11-16: Media & Sponsors:** Activating sponsor APIs and fallback mechanisms.
-* **Senior Dev:** Build the ElevenLabs loop in NestJS (return audio as **base64** in the JSON — no S3/file streaming). Implement the Exa call triggered by `resolve` (request `highlights`, guard for zero results, map to `exa_insight`). Wire the [fallback_responses.json](fallback_responses.json) fail-safe.
-* **Mid-Level Dev:** Build the **Recharts** 7-day dashboard (two metrics: `pain_level`, `sleep_hours`), the 3-tier theme switch (blue/amber/red), the conversation overlay (last 3 messages), the `exa_insight` card, and the "Crisis Handled / Dismiss" reset button. (No Recovery Check-in — removed in V5.)
 
+- **Senior Dev:** Build the ElevenLabs loop in NestJS (return audio as **base64** in the JSON — no S3/file streaming). Implement the Exa call triggered by `resolve` (request `highlights`, guard for zero results, map to `exa_insight`). Wire the [fallback_responses.json](fallback_responses.json) fail-safe.
+- **Mid-Level Dev:** Build the **Recharts** 7-day dashboard (two metrics: `pain_level`, `sleep_hours`), the 3-tier theme switch (blue/amber/red), the conversation overlay (last 3 messages), the `exa_insight` card, and the "Crisis Handled / Dismiss" reset button. (No Recovery Check-in — removed in V5.)
 
 4. **Hours 17-24: Polish & Pitch:** Code freeze and deployment.
-* Deploy Next.js to **Vercel** (auto HTTPS for the mic) and the NestJS/Postgres backend to **Railway/Render** (auto HTTPS). Set `NEXT_PUBLIC_API_URL` to the HTTPS backend URL.
-* Seed the Postgres DB: the hardcoded demo user (`NEXT_PUBLIC_DEMO_USER_ID`) with a **benign baseline** (`chronicConditions: ["mild eczema"]`, `currentMeds: ["multivitamin"]` — proves personalization without hijacking scripted scenarios), emergency contacts, and **4 days of history** where each `extractedMetrics` contains `{"pain_level": X, "sleep_hours": Y}` and a repeating `detectedConditionId` so the trend graph + trend surfacing both fire live.
-* Lock down and rehearse the live demo script.
+
+- Deploy Next.js to **Vercel** (auto HTTPS for the mic) and the NestJS/Postgres backend to **Railway/Render** (auto HTTPS). Set `NEXT_PUBLIC_API_URL` to the HTTPS backend URL.
+- Seed the Postgres DB: the hardcoded demo user (`NEXT_PUBLIC_DEMO_USER_ID`) with a **benign baseline** (`chronicConditions: ["mild eczema"]`, `currentMeds: ["multivitamin"]` — proves personalization without hijacking scripted scenarios), emergency contacts, and **4 days of history** where each `extractedMetrics` contains `{"pain_level": X, "sleep_hours": Y}` and a repeating `detectedConditionId` so the trend graph + trend surfacing both fire live.
+- Lock down and rehearse the live demo script.
