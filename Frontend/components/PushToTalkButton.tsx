@@ -1,69 +1,56 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePushToTalk } from "@/hooks/usePushToTalk";
 import { useAuraStore } from "@/store/aura.store";
 
 /**
- * The living Aura orb — press and hold to speak.
- *
- * It is the emotional centerpiece: it breathes at rest, flares while listening,
- * and spins a ring while Aura is thinking. Its color follows the active tier
- * through CSS variables, so the orb itself reflects the severity state.
+ * The living Aura orb — tap to start listening, tap again to stop & send.
+ * Aura speaks its reply aloud so the experience feels like a conversation.
  */
 export function PushToTalkButton() {
-  const { press, release, submitText, supported } = usePushToTalk();
+  const { toggle, submitText, supported, canVoice, canText } = usePushToTalk();
   const isRecording = useAuraStore((s) => s.isRecording);
   const isProcessing = useAuraStore((s) => s.isProcessing);
   const liveTranscript = useAuraStore((s) => s.liveTranscript);
 
-  const [held, setHeld] = useState(false);
   const [typed, setTyped] = useState("");
   const [typedInvalid, setTypedInvalid] = useState(false);
+  const [showText, setShowText] = useState(false);
 
-  // Safety: release if the pointer leaves the window mid-press.
-  useEffect(() => {
-    if (!held) return;
-    const up = () => {
-      setHeld(false);
-      release();
-    };
-    window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", up);
-    return () => {
-      window.removeEventListener("pointerup", up);
-      window.removeEventListener("pointercancel", up);
-    };
-  }, [held, release]);
+  const locked = !canVoice && !canText;
 
-  const onDown = () => {
-    if (isProcessing) return;
-    setHeld(true);
-    press();
+  const onToggle = () => {
+    if (isProcessing || !canVoice) return;
+    toggle();
   };
 
   const orbState = isProcessing ? "thinking" : isRecording ? "listening" : "idle";
 
-  const label =
-    orbState === "thinking"
-      ? "Aura is thinking…"
-      : orbState === "listening"
-        ? "Listening — release to send"
-        : "Hold to speak";
+  const label = locked
+    ? "Accept privacy consent to talk"
+    : !canVoice
+      ? "Voice locked — type below"
+      : orbState === "thinking"
+        ? "Aura is thinking…"
+        : orbState === "listening"
+          ? "Listening — pause to send, or tap to stop"
+          : "Tap to speak";
+
+  const textFallback = !supported || showText || !canVoice;
 
   return (
-    <div className="flex flex-col items-center gap-6 select-none">
-      <div className="relative flex h-64 w-64 items-center justify-center">
-        {/* outer breathing halo */}
+    <div className="flex flex-col items-center gap-5 select-none">
+      <div className="relative flex h-56 w-56 items-center justify-center sm:h-64 sm:w-64">
         <span
           className="pointer-events-none absolute inset-0 rounded-full blur-2xl"
           style={{
             background: "radial-gradient(circle, var(--aura-glow), transparent 62%)",
             animation: "breathe 6s ease-in-out infinite",
+            opacity: locked ? 0.35 : 1,
           }}
         />
 
-        {/* thinking ring */}
         {orbState === "thinking" && (
           <span
             className="animate-spin-slow pointer-events-none absolute inset-3 rounded-full border-2 border-transparent"
@@ -71,15 +58,14 @@ export function PushToTalkButton() {
           />
         )}
 
-        {/* the orb button */}
         <button
           type="button"
           aria-label={label}
           aria-pressed={isRecording}
-          disabled={isProcessing}
-          onPointerDown={onDown}
+          disabled={isProcessing || !canVoice}
+          onClick={onToggle}
           onContextMenu={(e) => e.preventDefault()}
-          className="group relative flex h-44 w-44 items-center justify-center rounded-full outline-none transition-transform duration-200 focus-visible:ring-4 focus-visible:ring-aura-accent/40 active:scale-95 disabled:cursor-wait"
+          className="group relative flex h-40 w-40 items-center justify-center rounded-full outline-none transition-transform duration-200 focus-visible:ring-4 focus-visible:ring-aura-accent/40 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:h-44 sm:w-44"
           style={{
             background:
               "radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--aura-accent) 78%, white), var(--aura-accent) 70%, color-mix(in srgb, var(--aura-accent) 60%, black))",
@@ -89,7 +75,6 @@ export function PushToTalkButton() {
                 : "orb-pulse 4s ease-in-out infinite",
           }}
         >
-          {/* glass sheen */}
           <span
             className="pointer-events-none absolute inset-0 rounded-full"
             style={{
@@ -97,7 +82,7 @@ export function PushToTalkButton() {
                 "radial-gradient(circle at 34% 26%, rgba(255,255,255,0.55), transparent 45%)",
             }}
           />
-          <MicIcon active={orbState === "listening"} />
+          {orbState === "listening" ? <StopIcon /> : <MicIcon active={false} />}
         </button>
       </div>
 
@@ -108,9 +93,21 @@ export function PushToTalkButton() {
             “{liveTranscript}”
           </p>
         )}
+        {orbState === "thinking" && (
+          <p className="mt-2 text-xs text-aura-muted">Aura will speak the reply aloud</p>
+        )}
+        {supported && canVoice && (
+          <button
+            type="button"
+            onClick={() => setShowText((v) => !v)}
+            className="mt-3 text-xs font-medium text-aura-accent hover:underline"
+          >
+            {showText ? "Hide text input" : "Prefer typing?"}
+          </button>
+        )}
       </div>
 
-      {!supported && (
+      {textFallback && (
         <form
           noValidate
           className="flex w-full max-w-sm items-center gap-2"
@@ -121,7 +118,7 @@ export function PushToTalkButton() {
               setTypedInvalid(true);
               return;
             }
-            if (isProcessing) return;
+            if (isProcessing || !canText) return;
             submitText(value);
             setTyped("");
             setTypedInvalid(false);
@@ -130,23 +127,26 @@ export function PushToTalkButton() {
           <input
             value={typed}
             aria-invalid={typedInvalid}
+            disabled={!canText || isProcessing}
             onChange={(e) => {
               const v = e.target.value;
               setTyped(v);
               if (typedInvalid) setTypedInvalid(!v.trim());
             }}
-            placeholder="Voice unavailable — type how you feel"
+            placeholder={
+              !canText ? "Accept data collection to type" : "Type how you feel…"
+            }
             className={[
-              "aura-transition flex-1 rounded-full bg-white/70 px-4 py-2 text-sm text-aura-ink outline-none placeholder:text-aura-muted/70",
+              "aura-transition flex-1 rounded-full bg-white px-4 py-2 text-sm text-aura-ink outline-none placeholder:text-aura-muted/70 disabled:opacity-50",
               typedInvalid
                 ? "border-2 border-red-500 focus:ring-2 focus:ring-red-400/30"
-                : "aura-panel border border-[var(--aura-panel-border)] focus:ring-2 focus:ring-aura-accent/40",
+                : "border border-[var(--aura-panel-border)] focus:ring-2 focus:ring-aura-accent/40",
             ].join(" ")}
           />
           <button
             type="submit"
             className="rounded-full bg-aura-accent px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            disabled={isProcessing}
+            disabled={isProcessing || !canText}
           >
             Send
           </button>
@@ -171,6 +171,18 @@ function MicIcon({ active }: { active: boolean }) {
       <rect x="9" y="3" width="6" height="11" rx="3" />
       <path d="M5 11a7 7 0 0 0 14 0" />
       <path d="M12 18v3" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="relative h-12 w-12 text-white drop-shadow"
+      fill="currentColor"
+    >
+      <rect x="7" y="7" width="10" height="10" rx="2" />
     </svg>
   );
 }

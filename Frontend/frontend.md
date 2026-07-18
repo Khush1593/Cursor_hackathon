@@ -66,9 +66,7 @@ All three calls go to `NEXT_PUBLIC_API_URL`. **You are the client. Never guess f
     "emergencyContactName": "Jane Doe",
     "emergencyContactPhone": "+1-555-0100"
   },
-  "metricsHistory": [
-    { "date": "2026-07-13", "pain_level": 5, "sleep_hours": 6 }
-  ],
+  "metricsHistory": [{ "date": "2026-07-13", "pain_level": 5, "sleep_hours": 6 }],
   "recentMessages": [
     {
       "role": "user",
