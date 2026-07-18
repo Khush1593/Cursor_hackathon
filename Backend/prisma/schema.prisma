@@ -12,8 +12,8 @@ datasource db {
 
 model User {
   id                    String   @id @default(uuid())
-  email                 String?  @unique
-  passwordHash          String?
+  email                 String   @unique
+  passwordHash          String
   age                   Int
   sex                   String
   chronicConditions     String[]
@@ -24,6 +24,13 @@ model User {
   isEmergencyState      Boolean  @default(false)
   pendingTriage         Json?
   dataRetentionDays     Int      @default(90)
+
+  /// SHA-256 of one-time password-reset token (never store raw token)
+  passwordResetTokenHash String?
+  passwordResetExpires   DateTime?
+
+  /// SHA-256 of current refresh token — enables server-side revoke on logout/reset
+  refreshTokenHash String?
 
   healthLogs     HealthLog[]
   exaInsights    ExaInsight[]

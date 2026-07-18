@@ -11,8 +11,7 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   async onModuleInit(): Promise<void> {
-    // Deferred until DATABASE_URL is available in the environment.
-    // await this.$connect();
+    await this.$connect();
   }
 
   async onModuleDestroy(): Promise<void> {
