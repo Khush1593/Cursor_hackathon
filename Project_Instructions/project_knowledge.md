@@ -509,6 +509,22 @@ Response: `{ "is_emergency_state": false, "active_mode": "preventive" }`
 
 #### `GET /api/users/:userId/export` (NEW) — see Section 9.5
 
+#### `GET /api/users/:userId/history` (NEW)
+
+Paginated conversation history grouped by day. Query: `limit`, `days`, `cursor`.
+
+#### `POST /api/users/handoff` (NEW)
+
+"Talk to a human" — no AI. Returns emergency contact + follow-up message; persists `HumanHandoffRequest`.
+
+#### `POST /api/users/location` (NEW)
+
+Optional geolocation share. Returns demo `nearest_er` (name, address, distance_miles).
+
+#### `GET /api/consent/status` (NEW)
+
+Latest consent per type for ConsentGate. Triage enforces `data_collection` (and `voice_recording` for voice).
+
 #### `POST /api/feedback` (NEW)
 
 `userId` from JWT — do not send in body:
@@ -590,7 +606,8 @@ Exact step order (updated with auth + audit + rate limit):
 2. **Rate-limit check** — cap AI/TTS calls per user per minute (protects API budget)
 3. Load `User` (baseline, `pendingTriage`, state)
 4. Query last-7-days `HealthLog` → `recentLogs`; run trend SQL → `recurringConditions`
-5. Build `TriageRequest`; POST to Python (or stub if `USE_AI_STUB=true`)
+5. Build `TriageRequest`; POST to Python (or stub if `USE_AI_STUB=true`) with
+   `PYTHON_SERVICE_TIMEOUT_MS` ≥ 50000 (covers Gemini ~45s ceiling + repair margin)
 6. Validate with Zod; on failure → step 12 (fallback)
 7. If `trigger_exa_search` set → Exa → `exa_insight` (+ persist `ExaInsight` row)
 8. ElevenLabs TTS → `audio_base64` (on TTS failure: `null`, do not crash)
@@ -713,6 +730,7 @@ MAIL_USER=...
 MAIL_PASS=...
 MAIL_FROM="Aura <noreply@aura.health>"
 USE_AI_STUB=false
+PYTHON_SERVICE_TIMEOUT_MS=50000   # Nest→Python; must exceed Gemini ~45s ceiling
 RATE_LIMIT_PER_MINUTE=10
 ```
 
@@ -791,11 +809,11 @@ Services: `postgres:15-alpine`, `python_ai:8000`, `nestjs_gateway:3000`, `nextjs
 - [ ] CORS configured early
 - [ ] Audio autoplay unlock on PTT mousedown
 - [ ] HTTPS end-to-end
-- [ ] Rate limiting on AI/TTS calls
-- [ ] Auth enforced on every PHI-touching route
-- [ ] Audit log written on emergency + resolve actions
-- [ ] Consent recorded before first triage session
-- [ ] Data export/delete endpoints functional
+- [✓] Rate limiting on AI/TTS calls
+- [✓] Auth enforced on every PHI-touching route
+- [✓] Audit log written on emergency + resolve actions
+- [✓] Consent recorded before first triage session
+- [✓] Data export/delete endpoints functional
 
 ---
 

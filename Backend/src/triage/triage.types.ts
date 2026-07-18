@@ -4,6 +4,12 @@ export type FrontendExaInsight = {
   summary: string;
 } | null;
 
+export type NearestErResult = {
+  name: string;
+  address: string;
+  distance_miles: number;
+} | null;
+
 export type FrontendTriageResponse = {
   action_type:
     'ask_follow_up' | 'resolve' | 'emergency_escalation' | 'general_response';
@@ -14,6 +20,10 @@ export type FrontendTriageResponse = {
   updated_metrics: Record<string, unknown>;
   exa_insight: FrontendExaInsight;
   reasoning_trace: string[];
+  /** Present on emergency when location is known. */
+  nearest_er: NearestErResult;
+  /** True on emergency when FE should prompt “Share location?” */
+  ask_share_location: boolean;
 };
 
 export type TriageRequestPayload = {

@@ -32,11 +32,17 @@ model User {
   /// SHA-256 of current refresh token — enables server-side revoke on logout/reset
   refreshTokenHash String?
 
-  healthLogs     HealthLog[]
-  exaInsights    ExaInsight[]
-  consentRecords ConsentRecord[]
-  auditLogs      AuditLog[]
-  feedbackFlags  FeedbackFlag[]
+  /// Optional last shared location (emergency geolocation)
+  lastLatitude  Float?
+  lastLongitude Float?
+  lastLocationAt DateTime?
+
+  healthLogs       HealthLog[]
+  exaInsights      ExaInsight[]
+  consentRecords   ConsentRecord[]
+  auditLogs        AuditLog[]
+  feedbackFlags    FeedbackFlag[]
+  humanHandoffs    HumanHandoffRequest[]
 }
 
 model HealthLog {
@@ -97,4 +103,14 @@ model FeedbackFlag {
   flaggedIncorrect Boolean
   note             String?
   createdAt        DateTime @default(now())
+}
+
+/// "Talk to a human" handoff requests
+model HumanHandoffRequest {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note      String?
+  status    String   @default("open") // open | acknowledged | closed
+  createdAt DateTime @default(now())
 }

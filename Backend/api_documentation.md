@@ -300,17 +300,67 @@ All require `credentials: 'include'` + valid access cookie (or Bearer).
 
 `consentType`: `data_collection` | `third_party_sharing` | `voice_recording`
 
+### `GET /api/consent/status`
+
+Returns latest decision per consent type (for ConsentGate UI).
+
+### Consent gate (enforced on triage)
+
+`POST /api/triage/turn` requires:
+
+| Input | Required consents |
+|-------|-------------------|
+| `text` | `data_collection` granted |
+| `voice` | `data_collection` + `voice_recording` granted |
+
+**`403` example:** `{ "statusCode": 403, "message": "Please accept data collection first." }`
+
 ### `GET /api/users/:userId/dashboard`
 
 `:userId` must match JWT. Returns `{ user, metricsHistory, recentMessages }`.
+
+### `GET /api/users/:userId/history`
+
+Paginated conversation history (beyond the dashboard’s last few lines).
+
+**Query:** `limit` (1–50, default 20), `days` (1–365, default 30), `cursor` (ISO timestamp — older than).
+
+```json
+{
+  "sessions": [
+    {
+      "date": "2026-07-14",
+      "entries": [
+        {
+          "id": "uuid",
+          "createdAt": "2026-07-14T10:00:00.000Z",
+          "detectedMode": "urgent_care",
+          "detectedConditionId": "migraine_exacerbation",
+          "userMessage": "headache again",
+          "auraReply": "Logged your symptoms for trend tracking."
+        }
+      ]
+    }
+  ],
+  "nextCursor": "2026-07-14T10:00:00.000Z",
+  "hasMore": true
+}
+```
 
 ### `POST /api/triage/turn`
 
 **Body (no userId):**
 
 ```json
-{ "transcript": "My chest hurts", "inputMode": "voice" }
+{
+  "transcript": "My chest hurts",
+  "inputMode": "voice",
+  "latitude": 37.7749,
+  "longitude": -122.4194
+}
 ```
+
+`latitude` / `longitude` are optional (used for nearest-ER on emergency).
 
 **Response:**
 
@@ -323,11 +373,50 @@ All require `credentials: 'include'` + valid access cookie (or Bearer).
   "is_emergency_state": false,
   "updated_metrics": { "pain_level": 4 },
   "exa_insight": null,
-  "reasoning_trace": ["..."]
+  "reasoning_trace": ["..."],
+  "nearest_er": null,
+  "ask_share_location": false
 }
 ```
 
+On emergency without location: `ask_share_location: true`. With location: `nearest_er: { "name": "City General Hospital ER", "address": "...", "distance_miles": 1.2 }`.
+
 On AI failure, offline fallback is returned (never a raw 500).
+
+**Rate limits (per user):**
+
+| Limit | Default | `429` message |
+|-------|---------|---------------|
+| Per minute | `RATE_LIMIT_PER_MINUTE` (10) | `You're sending updates too fast — try again in a minute.` |
+| Per hour | `TRIAGE_BUDGET_PER_HOUR` (60) | `You've reached your hourly triage limit — try again later.` |
+
+### `POST /api/users/handoff` — Talk to a human
+
+No AI. Creates a handoff request and returns the user’s emergency contact.
+
+```json
+{ "note": "optional context" }
+```
+
+**Response:**
+
+```json
+{
+  "handoffId": "uuid",
+  "status": "open",
+  "message": "A care coordinator will follow up.",
+  "emergencyContact": { "name": "Jane Doe", "phone": "+1-555-0100" },
+  "createdAt": "2026-07-18T08:00:00.000Z"
+}
+```
+
+### `POST /api/users/location` — Share geolocation
+
+```json
+{ "latitude": 37.7749, "longitude": -122.4194 }
+```
+
+**Response:** `{ "saved": true, "nearest_er": { ... }, "message": "Nearest ER: City General Hospital ER, 1.2 miles." }`
 
 ### `PATCH /api/users/reset-emergency`
 
@@ -341,7 +430,7 @@ No body. Uses JWT userId. Response: `{ "is_emergency_state": false, "active_mode
 
 ### `GET /api/users/:userId/export` / `DELETE /api/users/:userId/data`
 
-Ownership enforced. Export omits password/refresh hashes. Delete removes HealthLogs, ExaInsights, FeedbackFlags.
+Ownership enforced. Export omits password/refresh hashes. Delete removes HealthLogs, ExaInsights, FeedbackFlags, HumanHandoffRequests.
 
 ---
 
@@ -381,10 +470,43 @@ API 401 interceptor
 - Refresh tokens hashed server-side; mismatch clears the session (theft mitigation).
 - Auth endpoints are **rate-limited** (Nest Throttler).
 - **OwnershipGuard** enforces JWT `userId` vs path/body resource ids (`403` on mismatch).
-- Audit actions (non-PHI metadata): auth events, `consent_recorded`, `dashboard_view`, `triage_turn`, `emergency_escalation`, `feedback_flagged`, `data_export`, `data_delete`.
+- Audit actions (non-PHI metadata): auth events, `consent_recorded`, `dashboard_view`, `history_view`, `triage_turn`, `emergency_escalation`, `human_handoff`, `location_shared`, `feedback_flagged`, `data_export`, `data_delete`.
+- Triage is blocked until required consents are granted; AI/voice calls are rate-limited per user.
 
 ---
 
 ## 8. Swagger
 
 Open `http://localhost:3000/api/docs` after starting the Backend. Use the cookie auth scheme `aura_access_token` or Bearer after logging in via the login endpoint (browser will store cookies for “Try it out” on same origin).
+
+---
+
+## 9. API list (quick reference)
+
+Base path: `/api`. Auth = access cookie (or Bearer) required unless noted.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/api/health` | No | Liveness probe |
+| `POST` | `/api/auth/register` | No | Create account + set cookies |
+| `POST` | `/api/auth/login` | No | Login + set cookies |
+| `POST` | `/api/auth/logout` | Yes | Clear cookies + revoke refresh |
+| `POST` | `/api/auth/refresh` | Refresh cookie | Rotate access + refresh cookies |
+| `GET` | `/api/auth/me` | Yes | Current user |
+| `POST` | `/api/auth/forgot-password` | No | Email reset link |
+| `POST` | `/api/auth/reset-password` | No | Set new password from token |
+| `POST` | `/api/consent` | Yes | Record a consent decision |
+| `GET` | `/api/consent/status` | Yes | Latest consents (ConsentGate) |
+| `POST` | `/api/triage/turn` | Yes | Symptom triage turn (voice/text) |
+| `GET` | `/api/users/:userId/dashboard` | Yes* | Dashboard metrics + recent messages |
+| `GET` | `/api/users/:userId/history` | Yes* | Paginated conversation history |
+| `POST` | `/api/users/handoff` | Yes | Talk to a human |
+| `POST` | `/api/users/location` | Yes | Share geolocation (nearest ER) |
+| `PATCH` | `/api/users/reset-emergency` | Yes | Clear emergency lock |
+| `GET` | `/api/users/:userId/export` | Yes* | Export user data |
+| `DELETE` | `/api/users/:userId/data` | Yes* | Delete health/insight data |
+| `POST` | `/api/feedback` | Yes | Flag incorrect triage result |
+
+\* `:userId` must match the JWT user or the API returns `403`.
+
+Interactive docs: `http://localhost:3000/api/docs`

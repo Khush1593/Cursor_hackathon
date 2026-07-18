@@ -30,6 +30,11 @@ export default () => ({
     exposeResetToken: process.env.MAIL_DEV_EXPOSE_TOKEN === 'true',
   },
   pythonServiceUrl: process.env.PYTHON_SERVICE_URL ?? 'http://localhost:8000',
+  /** Nest→Python fetch timeout — must exceed Gemini 45s ceiling (+ repair margin). */
+  pythonServiceTimeoutMs: parseInt(
+    process.env.PYTHON_SERVICE_TIMEOUT_MS ?? '50000',
+    10,
+  ),
   useAiStub: process.env.USE_AI_STUB === 'true',
   exaApiKey: process.env.EXA_API_KEY ?? '',
   elevenLabs: {
@@ -37,4 +42,5 @@ export default () => ({
     voiceId: process.env.ELEVENLABS_VOICE_ID ?? '',
   },
   rateLimitPerMinute: parseInt(process.env.RATE_LIMIT_PER_MINUTE ?? '10', 10),
+  triageBudgetPerHour: parseInt(process.env.TRIAGE_BUDGET_PER_HOUR ?? '60', 10),
 });

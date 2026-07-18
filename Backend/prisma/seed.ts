@@ -56,13 +56,22 @@ async function main(): Promise<void> {
     });
   }
 
-  await prisma.consentRecord.create({
-    data: {
-      userId: user.id,
-      consentType: 'data_collection',
-      granted: true,
-      version: 'v1',
-    },
+  await prisma.consentRecord.deleteMany({ where: { userId: user.id } });
+  await prisma.consentRecord.createMany({
+    data: [
+      {
+        userId: user.id,
+        consentType: 'data_collection',
+        granted: true,
+        version: 'v1',
+      },
+      {
+        userId: user.id,
+        consentType: 'voice_recording',
+        granted: true,
+        version: 'v1',
+      },
+    ],
   });
 
   console.log(`Seeded demo user ${user.id} (${email}) / SecurePass1!`);
