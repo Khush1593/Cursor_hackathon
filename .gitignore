@@ -1,13 +1,52 @@
-# Python
-Python/.venv/
-Python/__pycache__/
-Python/**/__pycache__/
-Python/*.pyc
-Python/.env
-__pycache__/
-*.pyc
-.venv/
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Build output
+.next/
+out/
+build/
+dist/
+
+# Testing
+coverage/
+
+# Env files
 .env
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
+.env.*
+!.env.example
+!.env.local.example
+
+# Logs
+*-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+logs/
+*.log
+
+# Editor / OS
+.DS_Store
+*.pem
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# TypeScript
+*.tsbuildinfo
+
+# Vercel
+.vercel
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
