@@ -17,6 +17,9 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "prepare": "cd .. && husky Backend/.husky"
   },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "lint-staged": {
     "*.ts": [
       "eslint --fix",

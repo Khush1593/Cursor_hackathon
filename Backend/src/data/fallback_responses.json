@@ -6,7 +6,8 @@
     "audio_base64": null,
     "is_emergency_state": false,
     "updated_metrics": {},
-    "exa_insight": null
+    "exa_insight": null,
+    "reasoning_trace": ["Offline fallback: safe mode"]
   },
   "emergency_fallback": {
     "action_type": "emergency_escalation",
@@ -15,6 +16,7 @@
     "audio_base64": null,
     "is_emergency_state": true,
     "updated_metrics": {},
-    "exa_insight": null
+    "exa_insight": null,
+    "reasoning_trace": ["Offline fallback: emergency keyword combination matched"]
   }
 }
