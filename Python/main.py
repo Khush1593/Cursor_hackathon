@@ -2,6 +2,7 @@
 
 POST /triage → Gemini structured output → AuraResponse (frozen Nest contract).
 POST /tts    → optional ElevenLabs demo path (Nest owns production TTS).
+GET  /fairness/stats → non-PHI aggregate counters (hackathon ethics demo).
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import time
 from fastapi import FastAPI, HTTPException, Request
 
 from config import model_name, use_ai_stub
+from fairness import fairness_snapshot, record_triage_outcome
 from llm import run_triage
 from models import AuraResponse, TriageRequest, TtsRequest, TtsResponse
 from tts import synthesize_to_base64
@@ -25,7 +27,7 @@ logger = logging.getLogger("aura.python")
 app = FastAPI(
     title="Aura Triage Engine",
     description="Stateless clinical reasoning service for Aura V6 (Gemini)",
-    version="0.6.0",
+    version="0.7.0",
 )
 
 
@@ -57,8 +59,17 @@ def ready() -> dict:
         "status": "ok",
         "model": model_name(),
         "use_ai_stub": use_ai_stub(),
-        "version": "0.6.0",
+        "version": "0.7.0",
     }
+
+
+@app.get("/fairness/stats")
+def fairness_stats() -> dict:
+    """Non-PHI demographic outcome aggregates (suggestion #11).
+
+    In-memory only — not a substitute for Nest/DB audit storage.
+    """
+    return fairness_snapshot()
 
 
 @app.post("/triage", response_model=AuraResponse)
@@ -71,6 +82,8 @@ def triage(request: TriageRequest) -> AuraResponse:
         # Do not invent a fallback here — NestJS owns fallback_responses.json.
         logger.exception("Triage LLM failure")
         raise HTTPException(status_code=502, detail=f"Triage LLM failure: {exc}") from exc
+
+    record_triage_outcome(request, result)
 
     elapsed_ms = (time.perf_counter() - started) * 1000
     logger.info(
