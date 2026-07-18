@@ -60,11 +60,11 @@ Supporting locked data (under `Project_Instructions/`):
 
 ```
 [Browser / Next.js :3001]
-        │  REST only, JWT-authenticated
+        │  REST + credentials:include (HTTP-only cookies)
         ▼
 [NestJS Gateway :3000]  ←── Postgres (Prisma)
-        │  Auth · Audit Log · Consent            ElevenLabs (TTS → base64)
-        │                                         Exa (research on resolve)
+        │  Auth (cookie JWT) · Audit Log · Consent    ElevenLabs (TTS → base64)
+        │                                              Exa (research on resolve)
         ▼
 [Python FastAPI :8000]  ←── OpenAI structured outputs
         (stateless; triage_dataset injected into prompt)
@@ -182,8 +182,8 @@ correct for that. Name it as roadmap work, don't pretend the model already accou
 ```prisma
 model User {
   id                     String      @id @default(uuid())
-  email                  String?     @unique          // NEW — real auth
-  passwordHash           String?                       // NEW — real auth
+  email                  String      @unique            // required for auth
+  passwordHash           String                          // bcrypt
   age                    Int
   sex                    String
   chronicConditions      String[]
@@ -193,11 +193,14 @@ model User {
   activeMode             String      @default("preventive")
   isEmergencyState        Boolean     @default(false)
   pendingTriage          Json?
-  dataRetentionDays      Int         @default(90)      // NEW
+  dataRetentionDays      Int         @default(90)
+  passwordResetTokenHash String?                         // SHA-256 of reset token
+  passwordResetExpires   DateTime?
+  refreshTokenHash       String?                         // SHA-256 of refresh JWT
   healthLogs             HealthLog[]
   exaInsights            ExaInsight[]
-  consentRecords         ConsentRecord[]                // NEW
-  auditLogs              AuditLog[]                     // NEW
+  consentRecords         ConsentRecord[]
+  auditLogs              AuditLog[]
 }
 
 model HealthLog {
@@ -314,22 +317,34 @@ a detail to gloss over.
 
 ### 9.3 Authentication & Access Control
 
-Current gap: hardcoded `NEXT_PUBLIC_DEMO_USER_ID` means anyone with the URL sees full health
-data. Fix for hackathon scope:
+**Implemented (Backend):** email/password auth with **HTTP-only Secure cookies** — tokens are
+**not** stored in `localStorage` / `sessionStorage` (XSS mitigation).
 
-- Basic auth (NextAuth.js — email/password or magic link)
-- JWT session tokens validated on every NestJS route
-- Row-level authorization: users can only ever query their own `userId`, enforced server-side
+- **Register / Login / Logout / Refresh / Me / Forgot-password / Reset-password**
+- Access JWT (`aura_access_token`, short-lived) + refresh JWT (`aura_refresh_token`, rotated)
+- Cookies: `HttpOnly`, `Secure` in production (`COOKIE_SECURE` / `NODE_ENV=production`),
+  `SameSite=Lax` (dev) / `SameSite=None` when Secure
+- Passwords: bcrypt (12 rounds). Reset tokens: opaque hex, stored as SHA-256, 1h TTL
+- **Password reset email:** Nodemailer + HTML/text template (`Backend/src/mail/`)
+  - Link: `{FRONTEND_ORIGIN}/reset-password?token=...`
+  - SMTP via `MAIL_*` env; without SMTP, JSON transport logs the message in dev
+- Passport JWT strategy extracts cookie first, then optional `Authorization: Bearer` (Swagger)
+- **OwnershipGuard (implemented):** path `:userId` / residual `body.userId` must match JWT or `403`
+- PHI request bodies do **not** include `userId` — identity is always from the cookie JWT
+- Frontend must call APIs with `credentials: 'include'` / `withCredentials: true`
+- Full FE contract: [`Backend/api_documentation.md`](../Backend/api_documentation.md)
+- Interactive docs: `GET /api/docs` (Swagger)
 
 ```
 Auth flow:
-Frontend → POST /api/auth/login → NestJS validates → issues JWT
-Every request → Authorization: Bearer <token>
-NestJS middleware → decode JWT → attach userId → enforce ownership on all queries
+Frontend → POST /api/auth/login|register (credentials: include)
+         → NestJS sets HTTP-only cookies (access + refresh)
+Every request → cookies sent automatically → JwtAuthGuard → request.user.userId
+401 on access → POST /api/auth/refresh → retry; else login screen
 ```
 
 Roadmap only (state, don't build): MFA, role-based access (patient / clinician-reviewer /
-admin), automatic session timeout.
+admin). Password-reset email is implemented via Nodemailer (configure `MAIL_*`).
 
 ### 9.4 Encryption
 
@@ -377,19 +392,39 @@ build and one of the highest trust-signal-per-hour additions available.
 
 ### 10.1 Frontend ↔ NestJS
 
-#### `POST /api/auth/login` (NEW)
+#### Auth endpoints (cookie-based — see `Backend/api_documentation.md`)
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `POST` | `/api/auth/register` | Sets HTTP-only cookies; body returns `{ user, message }` (no tokens) |
+| `POST` | `/api/auth/login` | Same cookie + `{ user, message }` response |
+| `POST` | `/api/auth/logout` | Auth required; clears cookies + revokes refresh |
+| `POST` | `/api/auth/refresh` | Uses refresh cookie; rotates both cookies |
+| `GET` | `/api/auth/me` | Auth required; current user |
+| `POST` | `/api/auth/forgot-password` | Generic message; `resetToken` only in development |
+| `POST` | `/api/auth/reset-password` | `{ token, newPassword }` |
+
+**Login/register request example:**
 
 ```json
-{ "email": "user@example.com", "password": "..." }
+{ "email": "user@example.com", "password": "SecurePass1!" }
 ```
 
-Response: `{ "token": "jwt-string", "userId": "uuid-string" }`
-
-#### `POST /api/consent` (NEW)
+**Login/register success body (tokens are cookies only):**
 
 ```json
 {
-  "userId": "uuid-string",
+  "user": { "id": "uuid-string", "email": "user@example.com", "age": 34, "sex": "female" },
+  "message": "Logged in successfully. Auth cookies set."
+}
+```
+
+#### `POST /api/consent`
+
+**Auth required.** `userId` is taken from the JWT cookie — do **not** send `userId` in the body.
+
+```json
+{
   "consentType": "data_collection",
   "granted": true,
   "version": "v1"
@@ -429,11 +464,10 @@ Response: `{ "token": "jwt-string", "userId": "uuid-string" }`
 
 #### `POST /api/triage/turn` (primary, requires auth)
 
-**Request** (voice or text — both feed the same field):
+**Request** (voice or text — both feed the same field). `userId` comes from the JWT cookie — do not send it in the body:
 
 ```json
 {
-  "userId": "uuid-string",
   "transcript": "My chest hurts",
   "inputMode": "voice"
 }
@@ -468,7 +502,7 @@ is visible to the user, not a black box.
 
 #### `PATCH /api/users/reset-emergency`
 
-Request: `{ "userId": "uuid-string" }`
+No body — userId from JWT.  
 Response: `{ "is_emergency_state": false, "active_mode": "preventive" }`
 
 #### `DELETE /api/users/:userId/data` (NEW) — see Section 9.5
@@ -477,9 +511,10 @@ Response: `{ "is_emergency_state": false, "active_mode": "preventive" }`
 
 #### `POST /api/feedback` (NEW)
 
+`userId` from JWT — do not send in body:
+
 ```json
 {
-  "userId": "uuid-string",
   "healthLogId": "uuid-string",
   "flaggedIncorrect": true,
   "note": "optional"
@@ -668,16 +703,25 @@ EXA_API_KEY=...
 ELEVENLABS_API_KEY=...
 ELEVENLABS_VOICE_ID=...
 FRONTEND_ORIGIN=http://localhost:3001
-JWT_SECRET=...                # NEW
+JWT_SECRET=...
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+COOKIE_SECURE=false           # true in production (HTTPS)
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USER=...
+MAIL_PASS=...
+MAIL_FROM="Aura <noreply@aura.health>"
 USE_AI_STUB=false
-RATE_LIMIT_PER_MINUTE=10      # NEW
+RATE_LIMIT_PER_MINUTE=10
 ```
 
-**Suggested folders:** `users/`, `auth/` (NEW), `triage/`, `consent/` (NEW), `audit/` (NEW),
+**Suggested folders:** `users/`, `auth/` (cookie JWT + Swagger), `triage/`, `consent/`, `audit/`,
 `integrations/{ai,elevenlabs,exa}.client.ts`, `validation/aura.schema.ts`,
 `data/fallback_responses.json`
 
-**CORS (Hour 1):** allow `FRONTEND_ORIGIN` for GET/POST/PATCH/DELETE.
+**CORS:** allow `FRONTEND_ORIGIN` for GET/POST/PATCH/DELETE with **`credentials: true`**.
+**Swagger:** `/api/docs`. FE auth guide: `Backend/api_documentation.md`.
 
 **Seed (demo):** benign synthetic baseline (`chronicConditions: ["mild eczema"]`,
 `currentMeds: ["multivitamin"]`), emergency contacts, **4 days** of HealthLogs with
@@ -690,7 +734,8 @@ only, no BAAs are in place.**
 - Only translator between frontend and AI field names
 - Never return raw errors — always valid response or fallback
 - Field names frozen; change requires contract update + team notify
-- Every PHI-touching route must resolve `userId` from the JWT, never trust a client-supplied `userId` for auth decisions
+- Every PHI-touching route must resolve `userId` from the JWT cookie (or Bearer), never trust a client-supplied `userId` for auth decisions
+- Never put access/refresh tokens in JSON responses or browser storage — HTTP-only cookies only
 
 ---
 

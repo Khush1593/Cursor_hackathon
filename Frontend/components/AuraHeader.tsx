@@ -1,13 +1,24 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useAuraStore } from "@/store/aura.store";
 import { TIER_META } from "@/lib/theme";
 
-/** Top bar: Aura wordmark, live tier status pill, and the user chip. */
+/** Top bar: Aura wordmark, live tier status, user chip, logout. */
 export function AuraHeader() {
+  const router = useRouter();
   const mode = useAuraStore((s) => s.mode);
   const user = useAuraStore((s) => s.user);
+  const logout = useAuraStore((s) => s.logout);
+  const [busy, setBusy] = useState(false);
   const meta = TIER_META[mode];
+
+  const onLogout = async () => {
+    setBusy(true);
+    await logout();
+    router.replace("/login");
+  };
 
   return (
     <header className="flex items-center justify-between px-6 pt-6 sm:px-10">
@@ -42,10 +53,19 @@ export function AuraHeader() {
         </span>
 
         {user && (
-          <span className="hidden items-center gap-2 rounded-full bg-aura-accent-soft px-3 py-1.5 text-xs font-medium text-aura-ink sm:flex">
-            {user.age} · {user.sex}
+          <span className="hidden max-w-[10rem] truncate rounded-full bg-aura-accent-soft px-3 py-1.5 text-xs font-medium text-aura-ink sm:inline">
+            {user.email ?? `${user.age} · ${user.sex}`}
           </span>
         )}
+
+        <button
+          type="button"
+          onClick={onLogout}
+          disabled={busy}
+          className="rounded-full px-3 py-1.5 text-xs font-semibold text-aura-muted transition hover:bg-aura-accent-soft hover:text-aura-ink disabled:opacity-50"
+        >
+          {busy ? "…" : "Log out"}
+        </button>
       </div>
     </header>
   );

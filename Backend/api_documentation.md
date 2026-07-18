@@ -280,13 +280,72 @@ Use on app boot to restore session without a hardcoded demo user id.
 | `POST /logout` | required | — | |
 | `POST /refresh` | — | required | |
 | `GET /me` | required | — | |
-| Other PHI routes (`/users/*`, `/triage/*`, …) | required | — | Prefer `userId` from cookie JWT, not client body |
+| Other PHI routes (`/users/*`, `/triage/*`, `/consent`, `/feedback`) | required | — | **userId always from JWT cookie** — do not send `userId` in the body. Path `:userId` must equal JWT user or `403`. |
 
 Swagger also accepts `Authorization: Bearer <access_token>` for manual testing.
 
 ---
 
-## 5. Suggested frontend auth flow
+## 5. PHI / product endpoints (post-auth)
+
+All require `credentials: 'include'` + valid access cookie (or Bearer).
+
+### `POST /api/consent`
+
+**Body (no userId):**
+
+```json
+{ "consentType": "data_collection", "granted": true, "version": "v1" }
+```
+
+`consentType`: `data_collection` | `third_party_sharing` | `voice_recording`
+
+### `GET /api/users/:userId/dashboard`
+
+`:userId` must match JWT. Returns `{ user, metricsHistory, recentMessages }`.
+
+### `POST /api/triage/turn`
+
+**Body (no userId):**
+
+```json
+{ "transcript": "My chest hurts", "inputMode": "voice" }
+```
+
+**Response:**
+
+```json
+{
+  "action_type": "ask_follow_up",
+  "detected_mode": "urgent_care",
+  "ai_spoken_response": "...",
+  "audio_base64": null,
+  "is_emergency_state": false,
+  "updated_metrics": { "pain_level": 4 },
+  "exa_insight": null,
+  "reasoning_trace": ["..."]
+}
+```
+
+On AI failure, offline fallback is returned (never a raw 500).
+
+### `PATCH /api/users/reset-emergency`
+
+No body. Uses JWT userId. Response: `{ "is_emergency_state": false, "active_mode": "preventive" }`.
+
+### `POST /api/feedback`
+
+```json
+{ "healthLogId": "uuid", "flaggedIncorrect": true, "note": "optional" }
+```
+
+### `GET /api/users/:userId/export` / `DELETE /api/users/:userId/data`
+
+Ownership enforced. Export omits password/refresh hashes. Delete removes HealthLogs, ExaInsights, FeedbackFlags.
+
+---
+
+## 6. Suggested frontend auth flow
 
 ```
 App mount
@@ -315,16 +374,17 @@ API 401 interceptor
 
 ---
 
-## 6. Security notes
+## 7. Security notes
 
 - Passwords hashed with **bcrypt** (12 rounds).
-- Reset tokens stored as **SHA-256** hashes with 1-hour expiry; raw token shown only in development responses.
+- Reset tokens stored as **SHA-256** hashes with 1-hour expiry; raw token shown only when `MAIL_DEV_EXPOSE_TOKEN=true` in development.
 - Refresh tokens hashed server-side; mismatch clears the session (theft mitigation).
 - Auth endpoints are **rate-limited** (Nest Throttler).
-- Audit actions logged: `register`, `login`, `logout`, `forgot_password`, `reset_password`, `token_refresh` (non-PHI metadata only).
+- **OwnershipGuard** enforces JWT `userId` vs path/body resource ids (`403` on mismatch).
+- Audit actions (non-PHI metadata): auth events, `consent_recorded`, `dashboard_view`, `triage_turn`, `emergency_escalation`, `feedback_flagged`, `data_export`, `data_delete`.
 
 ---
 
-## 7. Swagger
+## 8. Swagger
 
 Open `http://localhost:3000/api/docs` after starting the Backend. Use the cookie auth scheme `aura_access_token` or Bearer after logging in via the login endpoint (browser will store cookies for “Try it out” on same origin).

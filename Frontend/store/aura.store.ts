@@ -1,23 +1,24 @@
 "use client";
 
 /**
- * Aura Zustand store — shape locked to Frontend/frontend.md §7.
- *
- * Components read from this store ONLY. `applyResponse()` is the single place
- * that maps a backend turn response onto UI state, so the whole app reacts to
- * one function.
- *
- * During the design phase `sendTurn()` resolves against local keyword mocks
- * (matching frontend.md §9). On integration day it is swapped for real fetch
- * calls in lib/api.ts — the store shape and applyResponse() stay identical.
+ * Aura Zustand store — components read from here only.
+ * Auth uses cookie sessions (lib/api.ts). Triage stays mock when USE_MOCK=1.
  */
 
 import { create } from "zustand";
+import {
+  type AuthUser,
+  type TurnResponse as ApiTurnResponse,
+  fetchDashboard,
+  getMe,
+  logout as apiLogout,
+  patchResetEmergency,
+  postTriageTurn,
+  isMockTriage,
+} from "@/lib/api";
+import { play } from "@/lib/audio";
 
 export type Tier = "preventive" | "urgent_care" | "emergency";
-
-export type ActionType =
-  "ask_follow_up" | "resolve" | "emergency_escalation" | "general_response";
 
 export type Msg = {
   role: "user" | "aura";
@@ -38,24 +39,20 @@ export type Exa = {
 } | null;
 
 export type User = {
+  id?: string;
+  email?: string;
   age: number;
   sex: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
 };
 
-/** The frozen POST /api/triage/turn response shape (frontend.md §5). */
-export type TurnResponse = {
-  action_type: ActionType;
-  detected_mode: Tier;
-  ai_spoken_response: string;
-  audio_base64: string | null;
-  is_emergency_state: boolean;
-  updated_metrics: { pain_level: number | null; sleep_hours: number | null } | null;
-  exa_insight: Exa;
-};
+export type TurnResponse = ApiTurnResponse;
+
+export type AuthStatus = "unknown" | "authenticated" | "unauthenticated";
 
 export interface AuraState {
+  authStatus: AuthStatus;
   userId: string;
   user: User | null;
   mode: Tier;
@@ -68,18 +65,17 @@ export interface AuraState {
   liveTranscript: string;
   booted: boolean;
 
-  // actions
-  bootstrap: () => void;
+  hydrateFromAuthUser: (user: AuthUser) => void;
+  clearSession: () => void;
+  restoreSession: () => Promise<boolean>;
+  logout: () => Promise<void>;
+  bootstrapDashboard: () => Promise<void>;
   setRecording: (v: boolean) => void;
   setLiveTranscript: (t: string) => void;
   sendTurn: (transcript: string) => Promise<void>;
   applyResponse: (res: TurnResponse) => void;
-  resetEmergency: () => void;
+  resetEmergency: () => Promise<void>;
 }
-
-/* ------------------------------------------------------------------ */
-/*  Seed data (stands in for GET /dashboard during design)            */
-/* ------------------------------------------------------------------ */
 
 function isoDaysAgo(days: number): string {
   const d = new Date();
@@ -104,10 +100,6 @@ const SEED_MESSAGES: Msg[] = [
     createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
   },
 ];
-
-/* ------------------------------------------------------------------ */
-/*  Local mock turn engine (design only — mirrors frontend.md §9)     */
-/* ------------------------------------------------------------------ */
 
 function mockTurn(transcript: string): TurnResponse {
   const t = transcript.toLowerCase();
@@ -168,12 +160,20 @@ function mockTurn(transcript: string): TurnResponse {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/*  Store                                                              */
-/* ------------------------------------------------------------------ */
+function toUser(u: AuthUser): User {
+  return {
+    id: u.id,
+    email: u.email,
+    age: u.age,
+    sex: u.sex,
+    emergencyContactName: u.emergencyContactName ?? undefined,
+    emergencyContactPhone: u.emergencyContactPhone ?? undefined,
+  };
+}
 
 export const useAuraStore = create<AuraState>((set, get) => ({
-  userId: process.env.NEXT_PUBLIC_DEMO_USER_ID ?? "demo-user",
+  authStatus: "unknown",
+  userId: "",
   user: null,
   mode: "preventive",
   isEmergency: false,
@@ -185,22 +185,98 @@ export const useAuraStore = create<AuraState>((set, get) => ({
   liveTranscript: "",
   booted: false,
 
-  bootstrap: () => {
-    if (get().booted) return;
+  hydrateFromAuthUser: (authUser) => {
     set({
-      booted: true,
-      user: {
-        age: 34,
-        sex: "female",
-        emergencyContactName: "Jane Doe",
-        emergencyContactPhone: "+1-555-0100",
-      },
+      authStatus: "authenticated",
+      userId: authUser.id,
+      user: toUser(authUser),
+      mode: authUser.activeMode,
+      isEmergency: authUser.isEmergencyState,
+      booted: false,
+    });
+  },
+
+  clearSession: () => {
+    set({
+      authStatus: "unauthenticated",
+      userId: "",
+      user: null,
       mode: "preventive",
       isEmergency: false,
-      metrics: SEED_METRICS,
-      messages: SEED_MESSAGES,
+      messages: [],
+      metrics: [],
       currentExa: null,
+      booted: false,
+      isRecording: false,
+      isProcessing: false,
+      liveTranscript: "",
     });
+  },
+
+  restoreSession: async () => {
+    try {
+      const me = await getMe();
+      get().hydrateFromAuthUser(me);
+      return true;
+    } catch {
+      get().clearSession();
+      return false;
+    }
+  },
+
+  logout: async () => {
+    try {
+      await apiLogout();
+    } catch {
+      /* still clear local session */
+    }
+    get().clearSession();
+  },
+
+  bootstrapDashboard: async () => {
+    if (get().booted) return;
+    const { userId, user } = get();
+
+    if (isMockTriage()) {
+      set({
+        booted: true,
+        metrics: SEED_METRICS,
+        messages: SEED_MESSAGES,
+        currentExa: null,
+        mode: get().mode || "preventive",
+        isEmergency: get().isEmergency,
+      });
+      return;
+    }
+
+    if (!userId) return;
+
+    try {
+      const dash = await fetchDashboard(userId);
+      set({
+        booted: true,
+        mode: dash.user.activeMode,
+        isEmergency: dash.user.isEmergencyState,
+        user: {
+          id: dash.user.id,
+          email: user?.email,
+          age: dash.user.age,
+          sex: dash.user.sex,
+          emergencyContactName: dash.user.emergencyContactName ?? undefined,
+          emergencyContactPhone: dash.user.emergencyContactPhone ?? undefined,
+        },
+        metrics: dash.metricsHistory,
+        messages: dash.recentMessages,
+        currentExa: null,
+      });
+    } catch {
+      // Backend dashboard not ready yet — fall back to seed so UI still works.
+      set({
+        booted: true,
+        metrics: SEED_METRICS,
+        messages: SEED_MESSAGES,
+      });
+    }
   },
 
   setRecording: (v) => set({ isRecording: v }),
@@ -217,11 +293,30 @@ export const useAuraStore = create<AuraState>((set, get) => ({
       liveTranscript: "",
     }));
 
-    // Design-phase latency + local mock. Swapped for lib/api.ts on integration.
-    await new Promise((r) => setTimeout(r, 700));
-    const res = mockTurn(clean);
-    get().applyResponse(res);
-    set({ isProcessing: false });
+    try {
+      let res: TurnResponse;
+      if (isMockTriage()) {
+        await new Promise((r) => setTimeout(r, 700));
+        res = mockTurn(clean);
+      } else {
+        res = await postTriageTurn(get().userId, clean);
+      }
+      get().applyResponse(res);
+      play(res.audio_base64);
+    } catch {
+      get().applyResponse({
+        action_type: "general_response",
+        detected_mode: get().mode,
+        ai_spoken_response:
+          "I couldn't reach the care service just now. Please try again in a moment.",
+        audio_base64: null,
+        is_emergency_state: get().isEmergency,
+        updated_metrics: null,
+        exa_insight: null,
+      });
+    } finally {
+      set({ isProcessing: false });
+    }
   },
 
   applyResponse: (res) => {
@@ -229,7 +324,6 @@ export const useAuraStore = create<AuraState>((set, get) => ({
     const today = new Date().toISOString().slice(0, 10);
 
     set((s) => {
-      // merge today's metrics point, ignoring null values (don't plot nulls)
       let metrics = s.metrics;
       if (res.updated_metrics) {
         const { pain_level, sleep_hours } = res.updated_metrics;
@@ -260,8 +354,20 @@ export const useAuraStore = create<AuraState>((set, get) => ({
     });
   },
 
-  resetEmergency: () => {
-    // On integration this calls PATCH /api/users/reset-emergency.
+  resetEmergency: async () => {
+    const { userId } = get();
+    if (!isMockTriage() && userId) {
+      try {
+        const res = await patchResetEmergency(userId);
+        set({
+          isEmergency: res.is_emergency_state,
+          mode: res.active_mode,
+        });
+        return;
+      } catch {
+        /* fall through to local reset */
+      }
+    }
     set({ isEmergency: false, mode: "preventive" });
   },
 }));
