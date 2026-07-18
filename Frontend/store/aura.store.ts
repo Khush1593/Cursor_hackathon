@@ -77,6 +77,8 @@ export interface AuraState {
   user: User | null;
   mode: Tier;
   isEmergency: boolean;
+  /** Last turn's explainability bullets (for emergency handoff / ReasoningPanel). */
+  lastReasoningTrace: string[];
   messages: Msg[];
   metrics: Point[];
   currentExa: Exa;
@@ -171,12 +173,35 @@ const SEED_HISTORY: HistorySession[] = [
 function mockTurn(transcript: string): TurnResponse {
   const t = transcript.toLowerCase();
 
+  if (
+    t.includes("droop") ||
+    t.includes("slurred") ||
+    (t.includes("face") && t.includes("numb"))
+  ) {
+    return {
+      action_type: "emergency_escalation",
+      detected_mode: "emergency",
+      ai_spoken_response:
+        "These signs can mean a stroke. Call emergency services now — every minute matters.",
+      audio_base64: null,
+      is_emergency_state: true,
+      updated_metrics: null,
+      exa_insight: null,
+      reasoning_trace: [
+        "Matched: stroke_tia (severity 10)",
+        "Emergency bypass: empty secondary_symptoms_to_check",
+      ],
+      ask_share_location: true,
+      nearest_er: null,
+    };
+  }
+
   if (t.includes("chest")) {
     return {
       action_type: "emergency_escalation",
       detected_mode: "emergency",
       ai_spoken_response:
-        "This could be serious. I'm escalating now — please call emergency services or use the button below.",
+        "This could be a serious cardiac warning. I'm escalating now — please call emergency services or use the buttons below.",
       audio_base64: null,
       is_emergency_state: true,
       updated_metrics: { pain_level: 9, sleep_hours: null },
@@ -241,7 +266,7 @@ function mockTurn(transcript: string): TurnResponse {
     is_emergency_state: false,
     updated_metrics: null,
     exa_insight: null,
-    reasoning_trace: null,
+    reasoning_trace: ["No clinical triggers matched"],
   };
 }
 
@@ -251,8 +276,8 @@ function toUser(u: AuthUser): User {
     email: u.email,
     age: u.age,
     sex: u.sex,
-    chronicConditions: u.chronicConditions,
-    currentMeds: u.currentMeds,
+    chronicConditions: u.chronicConditions ?? [],
+    currentMeds: u.currentMeds ?? [],
     emergencyContactName: u.emergencyContactName ?? undefined,
     emergencyContactPhone: u.emergencyContactPhone ?? undefined,
   };
@@ -278,6 +303,7 @@ export const useAuraStore = create<AuraState>((set, get) => {
     user: null,
     mode: "preventive",
     isEmergency: false,
+    lastReasoningTrace: [],
     messages: [],
     metrics: [],
     currentExa: null,
@@ -320,6 +346,7 @@ export const useAuraStore = create<AuraState>((set, get) => {
         user: null,
         mode: "preventive",
         isEmergency: false,
+        lastReasoningTrace: [],
         messages: [],
         metrics: [],
         currentExa: null,
@@ -401,6 +428,8 @@ export const useAuraStore = create<AuraState>((set, get) => {
             email: user?.email,
             age: dash.user.age,
             sex: dash.user.sex,
+            chronicConditions: user?.chronicConditions ?? [],
+            currentMeds: user?.currentMeds ?? [],
             emergencyContactName: dash.user.emergencyContactName ?? undefined,
             emergencyContactPhone: dash.user.emergencyContactPhone ?? undefined,
           },
@@ -547,7 +576,7 @@ export const useAuraStore = create<AuraState>((set, get) => {
           is_emergency_state: get().isEmergency,
           updated_metrics: null,
           exa_insight: null,
-          reasoning_trace: null,
+          reasoning_trace: [],
         });
         speakReply(message, null);
       } finally {
@@ -558,6 +587,7 @@ export const useAuraStore = create<AuraState>((set, get) => {
     applyResponse: (res) => {
       const now = new Date().toISOString();
       const today = new Date().toISOString().slice(0, 10);
+      const trace = res.reasoning_trace ?? [];
 
       set((s) => {
         let metrics = s.metrics;
@@ -582,13 +612,14 @@ export const useAuraStore = create<AuraState>((set, get) => {
         return {
           mode: res.detected_mode,
           isEmergency: res.is_emergency_state,
+          lastReasoningTrace: trace,
           messages: [
             ...s.messages,
             { role: "aura", text: res.ai_spoken_response, createdAt: now },
           ],
           metrics,
           currentExa: res.exa_insight ?? s.currentExa,
-          reasoning: res.reasoning_trace ?? [],
+          reasoning: trace,
           nearestEr: res.nearest_er ?? s.nearestEr,
           askShareLocation: !!res.ask_share_location,
         };
@@ -603,6 +634,7 @@ export const useAuraStore = create<AuraState>((set, get) => {
             isEmergency: res.is_emergency_state,
             mode: res.active_mode,
             askShareLocation: false,
+            lastReasoningTrace: [],
           });
           return;
         } catch {
@@ -613,6 +645,7 @@ export const useAuraStore = create<AuraState>((set, get) => {
         isEmergency: false,
         mode: "preventive",
         askShareLocation: false,
+        lastReasoningTrace: [],
       });
     },
 
@@ -761,6 +794,7 @@ export const useAuraStore = create<AuraState>((set, get) => {
         metrics: [],
         currentExa: null,
         reasoning: [],
+        lastReasoningTrace: [],
         historySessions: [],
         historyCursor: null,
         historyHasMore: false,

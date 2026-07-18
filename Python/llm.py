@@ -129,6 +129,54 @@ def _sanitize_reasoning_trace(trace: list[str], transcript: str) -> list[str]:
     return cleaned
 
 
+def _ensure_escalation_reasons(response: AuraResponse) -> list[str]:
+    """Guarantee urgent/emergency turns have clear why-bullets (suggestion #10)."""
+    trace = list(response.reasoning_trace or [])
+    mode = response.detected_mode
+    action = response.action_type
+
+    needs_why = action == "emergency_escalation" or mode in {
+        "emergency",
+        "urgent_care",
+    }
+    if not needs_why:
+        return trace[:3] if trace else ["No clinical triggers matched"]
+
+    joined = " ".join(trace).lower()
+    has_why = any(
+        token in joined
+        for token in (
+            "match",
+            "escalat",
+            "emergency",
+            "bypass",
+            "checking",
+            "secondary",
+            "urgent",
+            "ruled",
+            "severity",
+        )
+    )
+    if not has_why:
+        cid = response.detected_condition_id or "high_severity_pattern"
+        if action == "emergency_escalation":
+            trace.insert(
+                0,
+                f"Escalation: {cid} → emergency care guidance (not a diagnosis)",
+            )
+        elif mode == "urgent_care":
+            trace.insert(
+                0,
+                f"Urgent path: {cid} → clarifying questions before resolve",
+            )
+        else:
+            trace.insert(
+                0,
+                f"Matched: {cid} — ruling out higher-severity overlap first",
+            )
+    return trace[:3]
+
+
 def _sanitize_aura(response: AuraResponse, transcript: str = "") -> AuraResponse:
     """Drop illegal metric keys, normalize spoken text, sanitize reasoning_trace."""
     cleaned_metrics = {
@@ -138,6 +186,8 @@ def _sanitize_aura(response: AuraResponse, transcript: str = "") -> AuraResponse
     }
     spoken = _sanitize_spoken(response.ai_spoken_response)
     trace = _sanitize_reasoning_trace(response.reasoning_trace, transcript)
+    enriched = response.model_copy(update={"reasoning_trace": trace})
+    trace = _ensure_escalation_reasons(enriched)
     return response.model_copy(
         update={
             "extracted_dashboard_metrics": cleaned_metrics,
