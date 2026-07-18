@@ -1,0 +1,162 @@
+# Aura — full stack (Frontend + Backend + Python AI + Postgres)
+#
+# Usage:
+#   cp .env.example .env   # fill GEMINI_API_KEY / JWT_SECRET / etc.
+#   docker compose up --build
+#
+# URLs (host):
+#   Frontend  http://localhost:3001
+#   Backend   http://localhost:3000/api/docs
+#   Python    http://localhost:8000/health
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: aura-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aura_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aura_password}
+      POSTGRES_DB: ${POSTGRES_DB:-aura_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-aura_user} -d ${POSTGRES_DB:-aura_db}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - aura-net
+
+  python_ai:
+    build:
+      context: ./Python
+      dockerfile: Dockerfile
+    container_name: aura-python
+    restart: unless-stopped
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      MODEL_NAME: ${MODEL_NAME:-gemini-2.5-flash}
+      USE_AI_STUB: ${PYTHON_USE_AI_STUB:-0}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-45}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-21m00Tcm4TlvDq8ikWAM}
+      ELEVENLABS_MODEL_ID: ${ELEVENLABS_MODEL_ID:-eleven_multilingual_v2}
+    ports:
+      - "${PYTHON_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    networks:
+      - aura-net
+
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: aura-backend
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-production}
+      # Browser Origin (user opens localhost:3001) — NOT the frontend container name
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3001}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aura_user}:${POSTGRES_PASSWORD:-aura_password}@postgres:5432/${POSTGRES_DB:-aura_db}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_SECURE: ${MAIL_SECURE:-false}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASS: ${MAIL_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-Aura <noreply@aura.health>}
+      MAIL_RESET_PASSWORD_PATH: ${MAIL_RESET_PASSWORD_PATH:-/reset-password}
+      MAIL_DEV_EXPOSE_TOKEN: ${MAIL_DEV_EXPOSE_TOKEN:-false}
+      # Docker DNS name for the Python service
+      PYTHON_SERVICE_URL: http://python_ai:8000
+      PYTHON_SERVICE_TIMEOUT_MS: ${PYTHON_SERVICE_TIMEOUT_MS:-50000}
+      USE_AI_STUB: ${BACKEND_USE_AI_STUB:-false}
+      EXA_API_KEY: ${EXA_API_KEY:-}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-10}
+      TRIAGE_BUDGET_PER_HOUR: ${TRIAGE_BUDGET_PER_HOUR:-60}
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      python_ai:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+    networks:
+      - aura-net
+
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+      args:
+        # Next rewrite target (server-side). Browser still calls /api-proxy on :3001.
+        NEXT_PUBLIC_API_URL: http://backend:3000
+        NEXT_PUBLIC_USE_MOCK: ${NEXT_PUBLIC_USE_MOCK:-0}
+    container_name: aura-frontend
+    restart: unless-stopped
+    environment:
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "${FRONTEND_PORT:-3001}:3001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
+    networks:
+      - aura-net
+
+volumes:
+  postgres_data:
+
+networks:
+  aura-net:
+    driver: bridge
