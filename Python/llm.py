@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import List, Literal, Optional
 
@@ -217,6 +218,11 @@ def _stub_response(request: TriageRequest) -> AuraResponse:
     )
 
 
+def _is_rate_limited(exc: BaseException) -> bool:
+    text = str(exc)
+    return "429" in text or "RESOURCE_EXHAUSTED" in text
+
+
 def _call_gemini(system: str, user: str, *, repair: bool = False) -> AuraLLMSchema:
     client = _client()
     contents = user
@@ -250,14 +256,25 @@ def _call_gemini(system: str, user: str, *, repair: bool = False) -> AuraLLMSche
         return AuraLLMSchema.model_validate_json(text)
 
     timeout = llm_timeout_seconds()
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_invoke)
-        try:
-            return future.result(timeout=timeout)
-        except FuturesTimeout as exc:
-            raise RuntimeError(
-                f"Gemini call timed out after {timeout:.0f}s"
-            ) from exc
+    last_exc: BaseException | None = None
+    for attempt in range(2):
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_invoke)
+            try:
+                return future.result(timeout=timeout)
+            except FuturesTimeout as exc:
+                raise RuntimeError(
+                    f"Gemini call timed out after {timeout:.0f}s"
+                ) from exc
+            except Exception as exc:
+                last_exc = exc
+                if _is_rate_limited(exc) and attempt == 0:
+                    # Free-tier RPM is tight; one short wait helps demo reliability.
+                    time.sleep(25)
+                    continue
+                raise
+    assert last_exc is not None
+    raise last_exc
 
 
 def run_triage(request: TriageRequest) -> AuraResponse:
