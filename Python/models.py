@@ -49,3 +49,17 @@ class AuraResponse(BaseModel):
     ai_spoken_response: str
     trigger_exa_search: Optional[str] = None
     pending_triage_update: Optional[PendingTriage] = None
+    # V6: explainability bullets for Nest → frontend ReasoningPanel
+    reasoning_trace: List[str] = Field(default_factory=list)
+
+
+class TtsRequest(BaseModel):
+    """Text NestJS (or a demo client) sends for ElevenLabs TTS."""
+
+    text: str
+
+
+class TtsResponse(BaseModel):
+    """Base64 MP3 for the frontend audio player. null on TTS failure."""
+
+    audio_base64: Optional[str] = None

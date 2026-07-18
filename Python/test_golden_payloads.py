@@ -73,6 +73,16 @@ def main() -> None:
         if bad_keys:
             failures.append(f"{name}: illegal metric keys {bad_keys}")
 
+        if not isinstance(result.reasoning_trace, list):
+            failures.append(f"{name}: reasoning_trace must be a list")
+        elif len(result.reasoning_trace) < 1 or len(result.reasoning_trace) > 3:
+            failures.append(
+                f"{name}: reasoning_trace length={len(result.reasoning_trace)} "
+                "expected 1-3 bullets"
+            )
+        elif request.transcript.lower() in " ".join(result.reasoning_trace).lower():
+            failures.append(f"{name}: reasoning_trace must not quote transcript verbatim")
+
     print("\n=== SUMMARY ===")
     if failures:
         for f in failures:
