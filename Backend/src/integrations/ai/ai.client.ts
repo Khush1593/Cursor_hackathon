@@ -5,6 +5,8 @@ import { TriageRequestPayload } from '../../triage/triage.types';
 
 /**
  * HTTP client for the Python FastAPI triage service (+ local stub).
+ * Timeout must exceed Python's Gemini ceiling (~45s) so free-tier retries
+ * are not cut off by Nest before fallback can run cleanly.
  */
 @Injectable()
 export class AiClient {
@@ -19,11 +21,25 @@ export class AiClient {
 
     const baseUrl =
       this.config.get<string>('pythonServiceUrl') ?? 'http://localhost:8000';
-    const response = await fetch(`${baseUrl}/triage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const timeoutMs =
+      this.config.get<number>('pythonServiceTimeoutMs') ?? 50_000;
+
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}/triage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error: unknown) {
+      if (this.isTimeoutError(error)) {
+        throw new Error(
+          `AI service timed out after ${timeoutMs}ms (raise PYTHON_SERVICE_TIMEOUT_MS if needed)`,
+        );
+      }
+      throw error;
+    }
 
     if (!response.ok) {
       throw new Error(`AI service returned ${response.status}`);
@@ -31,6 +47,17 @@ export class AiClient {
 
     const json: unknown = await response.json();
     return AuraResponseSchema.parse(json);
+  }
+
+  private isTimeoutError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+    return (
+      error.name === 'TimeoutError' ||
+      error.name === 'AbortError' ||
+      error.message.toLowerCase().includes('timeout')
+    );
   }
 
   private stubResponse(payload: TriageRequestPayload): AuraResponse {

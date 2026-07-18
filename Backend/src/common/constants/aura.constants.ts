@@ -44,6 +44,9 @@ export const AUDIT_ACTIONS = [
   'forgot_password',
   'reset_password',
   'token_refresh',
+  'human_handoff',
+  'location_shared',
+  'history_view',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
