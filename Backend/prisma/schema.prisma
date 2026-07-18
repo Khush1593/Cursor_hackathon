@@ -1,0 +1,93 @@
+// Aura V6 — Prisma schema (structure only; migrations come later)
+// Source of truth: Project_Instructions/project_knowledge.md §7
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String   @id @default(uuid())
+  email                 String?  @unique
+  passwordHash          String?
+  age                   Int
+  sex                   String
+  chronicConditions     String[]
+  currentMeds           String[]
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  activeMode            String   @default("preventive") // preventive | urgent_care | emergency
+  isEmergencyState      Boolean  @default(false)
+  pendingTriage         Json?
+  dataRetentionDays     Int      @default(90)
+
+  healthLogs     HealthLog[]
+  exaInsights    ExaInsight[]
+  consentRecords ConsentRecord[]
+  auditLogs      AuditLog[]
+  feedbackFlags  FeedbackFlag[]
+}
+
+model HealthLog {
+  id                  String   @id @default(uuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt           DateTime @default(now())
+  rawAudioText        String
+  detectedMode        String // preventive | urgent_care | emergency
+  detectedConditionId String?
+  severityScore       Int?
+  extractedMetrics    Json
+  aiResponseText      String
+
+  feedbackFlags FeedbackFlag[]
+}
+
+model ExaInsight {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  triggerSymptom String
+  articleTitle   String
+  articleUrl     String
+  aiSummary      String
+}
+
+model ConsentRecord {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consentType String // data_collection | third_party_sharing | voice_recording
+  granted     Boolean
+  version     String
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actorId    String?
+  action     String // triage_turn | dashboard_view | emergency_escalation | data_export | data_delete
+  resourceId String?
+  metadata   Json? // non-PHI context ONLY
+  createdAt  DateTime @default(now())
+  ipAddress  String?
+}
+
+/// User quality-control flag ("this triage result seems wrong")
+model FeedbackFlag {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  healthLogId      String
+  healthLog        HealthLog @relation(fields: [healthLogId], references: [id], onDelete: Cascade)
+  flaggedIncorrect Boolean
+  note             String?
+  createdAt        DateTime @default(now())
+}
