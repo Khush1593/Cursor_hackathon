@@ -1,0 +1,19 @@
+{
+  "transcript": "chest tight, heart racing, bit nauseous",
+  "baseline": {
+    "age": 34,
+    "sex": "female",
+    "chronicConditions": ["mild eczema"],
+    "currentMeds": ["multivitamin"]
+  },
+  "recentLogs": [
+    {
+      "rawAudioText": "slept badly",
+      "detectedConditionId": null,
+      "extractedMetrics": { "sleep_hours": 5 },
+      "createdAt": "2026-07-16T22:10:00Z"
+    }
+  ],
+  "recurringConditions": [],
+  "pendingTriage": null
+}

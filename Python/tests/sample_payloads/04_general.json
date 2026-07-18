@@ -1,0 +1,12 @@
+{
+  "transcript": "just heading to the gym!",
+  "baseline": {
+    "age": 28,
+    "sex": "female",
+    "chronicConditions": [],
+    "currentMeds": []
+  },
+  "recentLogs": [],
+  "recurringConditions": [],
+  "pendingTriage": null
+}
